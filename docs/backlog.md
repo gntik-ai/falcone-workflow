@@ -1,6 +1,6 @@
 # 4. Implementation backlog
 
-12 epics, 36 stories; effort S/M/L is relative, not a delivery estimate. M0 discovery; M1 durable core; M2 integration; M3 migration and qualification.
+12 epics and 36 stories; effort S/M/L is relative, not a delivery estimate. M0 discovery; M1 durable core; M2 integration; M3 migration and qualification.
 
 - **EP-CON — Falcone contracts and developer experience**
 
