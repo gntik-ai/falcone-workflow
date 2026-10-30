@@ -1,6 +1,6 @@
 # 4. Implementation backlog
 
-12 epics and 36 stories; effort S/M/L is relative, not a delivery estimate. M0 discovery; M1 durable core; M2 integration; M3 migration and qualification.
+12 epics and 47 stories; effort S/M/L is relative, not a delivery estimate. M0 discovery; M1 durable core; M2 integration; M3 migration and qualification.
 
 - **EP-CON — Falcone contracts and developer experience**
 
@@ -22,7 +22,8 @@ Inventory routes, DSL, errors, roles, schedules, monitoring and task envelopes a
 
 - [ ] Capture fixtures for definition CRUD, publish, validate, executions, cancel, retry, signal, catalog and schedules.
 - [ ] Include existing SSE node-status/log-line/stream-end frames and Last-Event-ID behavior.
-- [ ] Record whether arbitrary Temporal SDK workflows exist; do not claim raw SDK compatibility without evidence.
+- [ ] Record every direct Temporal SDK or API caller as a migration item; raw Temporal SDK and server compatibility is out of scope (ADR 0001).
+- [ ] Fixture the legacy behaviors the native engine must reproduce: which triggers use start-or-signal and how their key is derived, what retry means, flow-input required/default enforcement, task-input reference rules, schedule overlap-alias normalisation and the effective retry and timeout defaults injected for absent policies.
 
 ## Planning
 
@@ -54,6 +55,8 @@ Introduce a narrow WorkflowBackend interface inside Falcone; separate public com
 - [ ] Concurrent identical starts yield one run; reuse of the key with different input returns a conflict.
 - [ ] Historic Temporal runs remain queryable and cancellable during mixed operation.
 - [ ] Connection failure followed by recovery succeeds without process restart; legacy error mappings are fixture-tested.
+- [ ] Business-ID conflict and reuse-after-close policies are fixture-tested, and a key reused after its retention window is documented.
+- [ ] Cancel, terminate and retry are fixture-tested as distinct operations: terminate requires a reason and is audited, retry follows the inventoried legacy meaning, children follow FR-DSL-07, and each response reports acceptance separately from the terminal outcome.
 
 ## Planning
 
@@ -64,8 +67,9 @@ Introduce a narrow WorkflowBackend interface inside Falcone; separate public com
 
 ## Requirements
 
-- **FR-CON-03:** The system must expose authenticated start, get, list, cancel, retry and signal operations with tenant-scoped idempotency keys.
+- **FR-CON-03:** The system must expose authenticated start, get, list, cancel, retry and signal operations with idempotency keys scoped to (tenant, workspace, flow): the same key with the same input returns the same run for at least max(24 h, the run's retention) and a different input returns a conflict; an optional business ID has a conflict policy (fail or use-existing; terminate-existing is administrator-only) and a reuse-after-close policy (allow, allow-if-failed or reject).
 - **FR-CON-04:** The system must route every existing run to its recorded backend and return a retryable service-unavailable response when that backend is unavailable.
+- **FR-CON-07:** The system must provide cancel (cooperative: stops new normal work, runs configured cleanup or compensation), terminate (administrative: no further workflow logic, reason required, audited) and retry (the inventoried legacy meaning, recorded either as a linked new run or as a new attempt lineage of the failed node occurrence) as distinct operations with explicit parent/child propagation, each reporting request acceptance separately from the eventual terminal outcome.
 
 
 ## CON-03 — Provide CLI and console integration contracts
@@ -85,6 +89,7 @@ Use the current console DSL and task catalog; add CLI operations through the sam
 - [ ] CLI and console send equivalent requests and display stable error codes.
 - [ ] A round-trip through the editor preserves all supported DSL fields.
 - [ ] Read-only users can inspect authorized flows but cannot publish definitions.
+- [ ] A connector output that violates its pinned output schema fails the node with a typed non-retryable error and no completion is committed.
 
 ## Planning
 
@@ -96,7 +101,39 @@ Use the current console DSL and task catalog; add CLI operations through the sam
 ## Requirements
 
 - **FR-CON-05:** The system must support CLI validate, publish, start, inspect, cancel and retry operations using Falcone authentication.
-- **FR-CON-06:** The system must provide versioned task schemas and validation errors usable by Falcone's existing visual editor.
+- **FR-CON-06:** The system must provide versioned task schemas and validation errors usable by Falcone's existing visual editor, preserving the FLW-E001 to FLW-E009 codes, rules and kinds verbatim; new validation rules receive new codes and never reuse existing ones.
+- **FR-CON-09:** The system must validate connector outputs against the pinned task output schema before committing a completion, treating a violation as a typed non-retryable error, and must expose input and output schemas to the visual editor for reference completion.
+
+
+## CON-04 — Add test mode with mocked outputs and simulated time
+
+<!-- falcone-workflow:CON-04 -->
+
+## User story
+
+As a flow author, I want to test branches, timeouts and approvals without live connectors so that I can verify a flow before publishing it.
+
+## Description
+
+Run a flow version against a separate test dispatcher that returns mocked task outputs or errors, advances simulated time and injects signals, events and approval decisions. Share the effect simulator with the MIG-01 differential harness. Expose test mode through the facade API and the CLI.
+
+## Acceptance criteria
+
+- [ ] A test run with mocked outputs produces the same history, error codes and SSE frames as the equivalent live fixture run.
+- [ ] Test mode resolves no credentials and its dispatcher has no route to any connector; an attempt to reach one fails the test run.
+- [ ] Simulated time fires timers, approval timeouts and schedule occurrences deterministically without wall-clock waiting.
+- [ ] Test runs are marked as test runs, emit no production usage events, and their quota treatment is documented.
+
+## Planning
+
+- Parent: EP-CON
+- Phase: M2
+- Effort: M
+- Depends on: CON-03, MIG-01
+
+## Requirements
+
+- **FR-CON-08:** The system must run a flow version in test mode with mocked task outputs or errors, simulated time and injected signals, events and approval decisions, producing the same history, error codes and SSE frames as live execution without resolving credentials or dispatching to any connector, through both the API and the CLI.
 
 
 - **EP-DSL — DSL interpretation and versioning**
@@ -120,6 +157,7 @@ Compile v1.0 graph structure to an immutable execution plan; preserve schema and
 - [ ] All existing valid and invalid DSL fixtures produce equivalent results or documented blockers.
 - [ ] Compilation stores schema version, plan hash and interpreter version.
 - [ ] Repeated node references receive unique execution occurrence IDs while retaining canvas node IDs.
+- [ ] Fixtures cover task-input references to flow inputs, run variables and prior node outputs, including missing, null and type-coercion cases; a start that violates a declared flow-input type, required or default rule is rejected with a stable error code and creates no run.
 
 ## Planning
 
@@ -131,7 +169,8 @@ Compile v1.0 graph structure to an immutable execution plan; preserve schema and
 ## Requirements
 
 - **FR-DSL-01:** The system must validate sequence, parallel, task, branch, wait, approval and sub-flow nodes using the inventoried Falcone DSL rules.
-- **FR-DSL-02:** The system must reject invalid cycles, duplicate IDs, unknown tasks, dangling references and invalid cron/duration expressions before publishing.
+- **FR-DSL-02:** The system must reject invalid cycles, duplicate IDs, unknown tasks, dangling references and invalid cron/duration expressions before publishing, reporting the inventoried FLW-E001 to FLW-E009 codes, rules and kinds verbatim.
+- **FR-DSL-08:** The system must preserve the inventoried rules by which task and sub-flow inputs reference flow inputs, run variables and prior node-occurrence outputs (reference syntax, evaluation time, missing-reference, null and type-coercion behaviour), and must apply declared flow-input type, required and default rules at admission, rejecting violations with stable error codes before a run is created.
 
 
 ## DSL-02 — Implement bounded expressions and graph semantics
@@ -151,6 +190,8 @@ Keep CEL semantics compatible with existing fixtures; isolate evaluation and per
 - [ ] CEL compatibility fixtures cover nulls, numbers, errors and time-sensitive inputs; incompatible expressions block migration.
 - [ ] Crash/restart at a branch or join neither duplicates successors nor loses completed branches.
 - [ ] Conflicting parallel writes are rejected or resolved by a versioned documented rule; elapsed time is not an implicit merge order.
+- [ ] Expressions exceeding a configured length, cost, result-size or input limit fail with a stable error code, and re-evaluating a persisted expression after restart uses the persisted evaluation time.
+- [ ] apiVersion v1.0 fixtures reproduce the Temporal outcome when one parallel branch fails while siblings run: fail-fast or wait-all, whether in-flight siblings are cancelled, left running or abandoned, and which sibling results are retained.
 
 ## Planning
 
@@ -161,8 +202,9 @@ Keep CEL semantics compatible with existing fixtures; isolate evaluation and per
 
 ## Requirements
 
-- **FR-DSL-03:** The system must evaluate expressions with bounded input size, runtime and memory without network, filesystem or arbitrary-code access.
-- **FR-DSL-04:** The system must persist branch decisions, parallel completion sets and deterministic output-merge behavior before advancing successors.
+- **FR-DSL-03:** The system must evaluate expressions with bounded input size, runtime and memory without network, filesystem or arbitrary-code access; maximum expression length, evaluation cost and steps, result size and input bytes are configured per interpreter version, the CEL library version is pinned per interpreter version, and clock functions use the persisted evaluation time, never the wall clock at replay.
+- **FR-DSL-04:** The system must persist branch decisions, parallel completion sets and deterministic output-merge behavior before advancing successors; parallel failure and cancellation semantics follow FR-DSL-07.
+- **FR-DSL-07:** The system must define per interpreter version, and preserve for apiVersion v1.0, (a) parallel-node failure semantics: fail-fast or wait-all, whether in-flight sibling tasks are cancelled, left running or abandoned, and which sibling results are retained; and (b) child-run behaviour when the parent is cancelled, terminated, fails or times out: terminate, request-cancel or abandon. Both must be fixture-tested against Temporal outcomes.
 
 
 ## DSL-03 — Pin definitions, children and interpreter semantics
@@ -182,6 +224,8 @@ Version definitions, connector contracts and interpreter semantics independently
 - [ ] Publishing a new definition leaves active parent and child runs unchanged.
 - [ ] A rolling upgrade with old/new evaluators completes compatible runs and leaves unsupported runs safely parked.
 - [ ] Bounded sub-flow depth and expanded graph size prevent recursive resource exhaustion.
+- [ ] Cancelling, terminating, failing or timing out a parent applies the inventoried legacy child policy (Temporal's default is terminate) in fixtures; an abandoned child still counts against its tenant's quota.
+- [ ] An upgrade cannot remove an interpreter or definition version while an open run references it.
 
 ## Planning
 
@@ -192,8 +236,101 @@ Version definitions, connector contracts and interpreter semantics independently
 
 ## Requirements
 
-- **FR-DSL-05:** The system must pin each run to immutable definition and interpreter versions and each child to an authorized explicit definition version.
-- **FR-DSL-06:** The system must reject unsupported historical versions and require an explicit audited migration plan before changing active-run semantics.
+- **FR-DSL-05:** The system must pin each run to immutable definition and interpreter versions and each child to an authorized explicit definition version; child behavior on parent cancellation, termination, failure or timeout follows FR-DSL-07.
+- **FR-DSL-06:** The system must reject unsupported historical versions, require an explicit audited migration plan before changing active-run semantics, and retain every interpreter and definition version referenced by an open run for at least the longest permitted remaining wait, or migrate the run through FR-DSL-11.
+
+
+## DSL-04 — Add error boundaries and failure handlers
+
+<!-- falcone-workflow:DSL-04 -->
+
+## User story
+
+As a flow author, I want to catch specific errors, always run cleanup and handle flow failure so that business flows can end gracefully instead of only retrying or failing.
+
+## Description
+
+In an additive DSL version, add error boundaries on task, sub-flow, sequence and parallel nodes that route matching FR-ACT-07 error types to a handler node after retries are exhausted, finalizer nodes for a scope and a flow-level on-failure handler. A boundary handler runs before compensation; compensation runs only when the error escapes the scope. Extend validation so scoped handler edges keep the graph acyclic. apiVersion v1.0 behavior is unchanged.
+
+## Acceptance criteria
+
+- [ ] An error matching a boundary's declared type runs its handler after retries are exhausted and is recorded in history; a non-matching error fails the run exactly as in apiVersion v1.0.
+- [ ] Finalizers run once on success, failure and cancellation of their scope, each with its own timeout so cancellation stays bounded; a crash during a finalizer resumes without running it twice.
+- [ ] With compensation (HUM-02) enabled, the boundary handler runs first and compensation runs only when the error escapes the scope.
+- [ ] Validation rejects handler edges that form a cycle with a new FLW error code; apiVersion v1.0 validation fixtures are unchanged.
+
+## Planning
+
+- Parent: EP-DSL
+- Phase: M2
+- Effort: L
+- Depends on: DSL-03, ACT-02, HUM-02
+
+## Requirements
+
+- **FR-DSL-09:** In an additive DSL version, the system must support error boundaries on task, sub-flow, sequence and parallel nodes that route errors matching declared error types (after retries are exhausted) to a declared handler node, optional finalizer nodes that run on success, failure or cancellation of their scope, and a flow-level on-failure handler; caught errors must be recorded in history, and uncaught errors must fail the run exactly as in v1.0.
+
+
+## DSL-05 — Add dynamic fan-out over runtime collections
+
+<!-- falcone-workflow:DSL-05 -->
+
+## User story
+
+As a flow author, I want to run a task or sub-flow for each item of a runtime list so that per-file, per-record and per-prompt processing needs no fixed number of branches.
+
+## Description
+
+Add a map node in an additive DSL version with a declared maximum item count, maximum concurrency, failure policy and index-ordered output. Reserve fan-out quota at expansion time, persist per-item occurrence state, store item results as object references and chunk large collections into child runs.
+
+## Acceptance criteria
+
+- [ ] A collection over the declared maximum item count is rejected before expansion is committed; expansion reserves fan-out quota (FR-TEN-05) and fails explicitly when the quota is exceeded.
+- [ ] A crash during expansion or item execution neither duplicates nor drops items; per-item occurrence IDs are stable across recovery.
+- [ ] Fail-fast, continue and minimum success count or ratio policies produce the documented run outcome, and the output collection is ordered by item index regardless of completion order.
+- [ ] Running items never exceed the declared concurrency, and one tenant's large map does not starve other tenants in the TEN-03 fairness benchmark.
+
+## Planning
+
+- Parent: EP-DSL
+- Phase: M2
+- Effort: L
+- Depends on: DSL-03, TEN-03
+
+## Requirements
+
+- **FR-DSL-10:** The system must support a map node that runs a task or sub-flow for each element of a runtime collection with a declared maximum item count, maximum concurrency, failure policy (fail-fast, continue, or minimum success count or ratio) and index-ordered output collection, reserving fan-out quota at expansion time and persisting per-item occurrence state so that a crash neither duplicates nor drops items.
+
+
+## DSL-06 — Migrate in-flight runs between flow versions
+
+<!-- falcone-workflow:DSL-06 -->
+
+## User story
+
+As a workspace operator, I want to move waiting runs to a corrected version of the same flow so that a definition fix can reach runs that wait for months.
+
+## Description
+
+Native-to-native only: migrate selected waiting or running native runs to another published version of the same flow using an explicit node-occurrence mapping, validated in a dry run and applied atomically per run. This is not a Temporal-history converter (FR-MIG-04). Credential lineage, quota reservations and absolute timer due times carry over unchanged.
+
+## Acceptance criteria
+
+- [ ] A dry run lists, per selected run, the mapped node occurrences and every reason a run cannot be migrated, without changing any run.
+- [ ] Migration is rejected when an active task, timer or approval lacks a mapping or a mapping changes node type or scope.
+- [ ] An applied migration commits atomically per run under the expected revision, keeps absolute timer due times, credential lineage and quota reservations, and records actor, reason and both versions in audit.
+- [ ] A stale run revision fails that run's migration without partial changes.
+
+## Planning
+
+- Parent: EP-DSL
+- Phase: M3
+- Effort: L
+- Depends on: DSL-03, OBS-01
+
+## Requirements
+
+- **FR-DSL-11:** The system must migrate selected waiting or running native runs to another published version of the same flow using an explicit node-occurrence mapping that is validated in a dry run, applied atomically per run under the expected revision and recorded in audit, and must reject migration when an active task, timer or approval lacks a mapping or the mapping changes node type or scope.
 
 
 - **EP-DUR — Durable state and recovery**
@@ -241,7 +378,7 @@ As an SRE, I want workers to recover abandoned tasks so that node failure does n
 
 ## Description
 
-Claim ready tasks with bounded leases, database time, monotonic attempt fencing and periodic reconciliation.
+Claim ready tasks with bounded leases, database time, monotonic attempt fencing and periodic reconciliation, using the shared Falcone lease/fencing module that falcone-serverless story STO-03 builds in Falcone instead of an engine-specific implementation.
 
 ## Acceptance criteria
 
@@ -279,6 +416,8 @@ Use explicit continuations and snapshots; preserve audit order and payload refer
 - [ ] Restore an encrypted backup into an isolated environment and complete waiting and running fixtures.
 - [ ] Compacted runs retain a contiguous inspectable event lineage or an explicit archive cursor.
 - [ ] Recovery reports possible post-backup external effects and prevents automatic duplicate dispatch until reconciled.
+- [ ] A run that exceeds a segment limit continues under the same public run ID, and an SSE client resumes across the segment boundary without gaps.
+- [ ] Closed runs past the workspace retention period are deleted with their payload objects unless a legal hold applies; erasure for a data subject removes linked payload objects while keeping redacted structural history; every deletion is audited.
 
 ## Planning
 
@@ -289,8 +428,9 @@ Use explicit continuations and snapshots; preserve audit order and payload refer
 
 ## Requirements
 
-- **FR-DUR-05:** The system must bound event history and payload growth using configured limits and resumable continuation or archival policies.
+- **FR-DUR-05:** The system must bound event history and payload growth using configured limits and resumable continuation or archival policies: a run segment has a configured maximum event count and byte size, and continuation keeps the public run ID, links segments and keeps SSE cursors (FR-OBS-01) monotonic across segments.
 - **FR-DUR-06:** The system must restore database and referenced object payloads to a consistent recovery point and reconcile external effects before resuming dispatch.
+- **FR-DUR-07:** The system must apply a per-workspace retention period to closed runs within quota limits, support authorized deletion of individual closed runs and their payload objects with audit, and support erasure of payload objects linked to a data subject while preserving redacted structural history, honoring legal-hold flags that suspend deletion.
 
 
 - **EP-ACT — Task execution and long-running work**
@@ -345,6 +485,8 @@ Use stable business-operation idempotency keys across attempts, typed errors and
 - [ ] Inject a crash after external success but before completion commit; idempotent connector deduplicates the retry.
 - [ ] Non-idempotent connector enters reconciliation-required when success is ambiguous.
 - [ ] Run cancellation and retry budgets terminate new attempts without erasing prior outcomes.
+- [ ] A v1.0 task without a retry policy compiles to a plan recording the effective legacy defaults (Temporal: unlimited attempts, 1 s initial interval, coefficient 2.0, maximum 100 × initial); fixtures verify the backoff formula and each timeout kind.
+- [ ] An error whose type is listed in nonRetryableErrors fails without retry; an unknown legacy error-type name in a definition is reported as a migration blocker, not ignored.
 
 ## Planning
 
@@ -355,8 +497,9 @@ Use stable business-operation idempotency keys across attempts, typed errors and
 
 ## Requirements
 
-- **FR-ACT-03:** The system must apply configured maximum attempts, backoff, retryable error classes, start-to-close, schedule-to-close and heartbeat timeouts.
-- **FR-ACT-04:** The system must classify connectors by idempotency support and surface ambiguous external outcomes instead of promising universal exactly-once effects.
+- **FR-ACT-03:** The system must apply the retry fields maxAttempts (at least 1), initialInterval, backoffCoefficient (at least 1), maximumInterval and nonRetryableErrors (FR-ACT-07 types) with delay(n) = min(initialInterval × backoffCoefficient^(n−1), maximumInterval), and the timeouts scheduleToStart (queue wait), startToClose (per attempt), scheduleToClose (all attempts), heartbeat (at most startToClose) and a run-level executionTimeout (none for apiVersion v1.0); the compiled plan of a v1.0 definition must store the effective legacy defaults explicitly, including those injected for absent policies or timeouts; optional jitter and a connector-supplied next-delay override belong to a new apiVersion and never extend maxAttempts or scheduleToClose.
+- **FR-ACT-04:** The system must classify each catalog connector as idempotent-by-key, reconcilable (read-after-timeout) or non-idempotent, use that class for retry eligibility, the repair preview (FR-HUM-08) and ambiguous-outcome incidents (FR-HUM-09), block blind retries of non-idempotent connectors regardless of maxAttempts, and surface ambiguous external outcomes instead of promising universal exactly-once effects.
+- **FR-ACT-07:** The system must classify every task, expression and connector failure with a stable error type from a versioned taxonomy (at least validation, authorization, timeout, communication, rate-limited, ambiguous-outcome, cancelled and connector-specific types), and must evaluate nonRetryableErrors for apiVersion v1.0 definitions against the inventoried legacy Temporal error-type names emitted by each catalog task.
 
 
 ## ACT-03 — Support asynchronous jobs and checkpoints
@@ -369,13 +512,14 @@ As a data analyst, I want long-running tasks to survive worker restarts so that 
 
 ## Description
 
-Separate job submission, observation, checkpoint and result retrieval; avoid holding orchestration processes during waits.
+Separate job submission, observation, checkpoint and result retrieval; avoid holding orchestration processes during waits. Checkpoints use the falcone-serverless job checkpoint contract (ctr-job-checkpoint).
 
 ## Acceptance criteria
 
 - [ ] A worker dies after job submission; reconciliation finds the same external job.
 - [ ] A cancelled job cannot report the workflow completed; delayed cleanup is visible and retried under policy.
 - [ ] A capability-qualified checkpoint resumes correctly; unsupported native workloads remain migration blockers.
+- [ ] A run waiting for the configured multi-month maximum in a simulated-time test resumes with renewed credentials after a Keycloak session or offline-token expiry, on its pinned interpreter version.
 
 ## Planning
 
@@ -387,7 +531,7 @@ Separate job submission, observation, checkpoint and result retrieval; avoid hol
 ## Requirements
 
 - **FR-ACT-05:** The system must persist external job IDs and checkpoint references and resume observation after worker loss without blindly resubmitting the job.
-- **FR-ACT-06:** The system must support configurable multi-day waits with bounded heartbeat, cancellation and credential-renewal policies.
+- **FR-ACT-06:** The system must support waits, approvals and timers lasting months, up to a policy maximum set by the product owner, with bounded heartbeat, cancellation and credential-renewal policies, and must exercise credential renewal (FR-TEN-04) in a test that crosses a Keycloak session or offline-token expiry.
 
 
 - **EP-TIM — Timers and schedules**
@@ -411,6 +555,7 @@ Store due timestamps in PostgreSQL, use database time and serialize timer firing
 - [ ] Restart all engine pods while a timer is pending; it fires after recovery.
 - [ ] Race an approval, timeout and cancellation and verify one accepted outcome and audited losers.
 - [ ] Clock skew between workers does not move a database-timed deadline earlier.
+- [ ] A computed wait-until instant is persisted when the timer is armed and is not re-evaluated after restart or upgrade; an instant given in a named time zone fires at the correct UTC instant across a DST change.
 
 ## Planning
 
@@ -423,6 +568,7 @@ Store due timestamps in PostgreSQL, use database time and serialize timer firing
 
 - **FR-TIM-01:** The system must persist wait and retry timers and fire each logical timer at most once into workflow state.
 - **FR-TIM-02:** The system must resolve simultaneous signal, timeout and cancellation transitions with one documented transactional ordering rule.
+- **FR-TIM-07:** The system must support waiting until an absolute instant or a CEL-computed instant with an explicit IANA time zone, evaluated once and persisted before the timer is armed.
 
 
 ## TIM-02 — Replace flow schedules with compatible controls
@@ -442,6 +588,8 @@ Preserve one schedule per flow and public list/get/pause/resume/trigger response
 - [ ] Fixtures match the current schedule API, including absent and foreign schedules.
 - [ ] Concurrent schedulers create one run per occurrence and enforce overlap policy.
 - [ ] DST transitions and outage catch-up produce documented bounded outcomes.
+- [ ] Each of the eight overlap names and an absent catchupWindow have fixtures matching the inventoried legacy outcome.
+- [ ] Trigger-now is audited and applies the overlap policy unless overridden; a schedule past its end bound or maximum action count, or paused on failure, admits no further occurrences.
 
 ## Planning
 
@@ -452,8 +600,9 @@ Preserve one schedule per flow and public list/get/pause/resume/trigger response
 
 ## Requirements
 
-- **FR-TIM-03:** The system must preserve Falcone schedule identities, published cron text, next-action times, recent actions and idempotent pause/resume behavior.
-- **FR-TIM-04:** The system must implement explicit overlap, catch-up window, timezone and daylight-saving policies and atomically deduplicate each scheduled occurrence.
+- **FR-TIM-03:** The system must preserve Falcone schedule identities, published cron text, next-action times, the inventoried number of retained recent actions and idempotent pause/resume behavior; trigger-now and pause/resume notes follow FR-TIM-08.
+- **FR-TIM-04:** The system must preserve the eight DSL overlap names (skip, allow, allow_all, buffer, buffer_one, buffer_all, cancel_other, terminate_other) with their inventoried normalisation and skip as the default, use the inventoried effective catch-up window when catchupWindow is absent, evaluate apiVersion v1.0 schedules in UTC, run a nonexistent local time once at the next valid instant and an ambiguous local time once at its first occurrence for time-zone-aware schedules (a new field), and atomically deduplicate each occurrence by (schedule ID, nominal UTC instant); pausing does not affect admitted runs and manual triggers are not bound by the catch-up window.
+- **FR-TIM-08:** The system must support optional schedule start and end bounds, bounded jitter, a maximum action count, pause-on-failure, an operator note on pause and resume, and an audited trigger-now action that applies the schedule's overlap policy unless overridden.
 
 
 ## TIM-03 — Coordinate schedule cutover and backfill
@@ -473,6 +622,7 @@ Add backend ownership epochs, bounded backfill and reconciliation against legacy
 - [ ] Pause legacy admission, reconcile accepted occurrences, transfer the ownership epoch and resume the new scheduler.
 - [ ] A stale schedule owner cannot admit runs after handover.
 - [ ] Backfill cancellation stops future admissions without deleting already accepted runs.
+- [ ] A second backfill on a schedule with an active backfill is rejected, and each reprocess mode selects the documented occurrences in fixtures.
 
 ## Planning
 
@@ -484,7 +634,7 @@ Add backend ownership epochs, bounded backfill and reconciliation against legacy
 ## Requirements
 
 - **FR-TIM-05:** The system must fence schedule ownership during backend handover so only one engine may admit an occurrence.
-- **FR-TIM-06:** The system must support audited bounded backfill with a preview of candidate occurrences and quota impact.
+- **FR-TIM-06:** The system must support audited bounded backfill over [start, end) with a reprocess mode (missing only, missing and failed, or all), an order (oldest first by default, newest first optional), a concurrency cap independent of live scheduling and the schedule's overlap policy; backfill is exempt from the catch-up window, limited to one active backfill per schedule with a maximum occurrence count, can be paused and cancelled, and offers a dry run listing candidate occurrences and quota impact.
 
 
 - **EP-EVT — Events and trigger delivery**
@@ -501,7 +651,7 @@ As a platform engineer, I want durable event delivery so that broker outages can
 
 ## Description
 
-Use Kafka as transport, PostgreSQL as state authority; enforce tenant-bound event identities.
+Use Kafka as transport and PostgreSQL as state authority; enforce tenant-bound event identities. Use the shared Falcone outbox/inbox module that falcone-serverless story STO-03 builds in Falcone instead of an engine-specific implementation.
 
 ## Acceptance criteria
 
@@ -519,7 +669,7 @@ Use Kafka as transport, PostgreSQL as state authority; enforce tenant-bound even
 ## Requirements
 
 - **FR-EVT-01:** The system must persist incoming trigger/event deduplication records and resulting workflow transitions before acknowledging delivery.
-- **FR-EVT-02:** The system must publish committed outgoing events through a retryable transactional outbox with stable event IDs.
+- **FR-EVT-02:** The system must publish committed outgoing events, including the FR-EVT-09 lifecycle event catalogue, through a retryable transactional outbox with stable event IDs.
 
 
 ## EVT-02 — Preserve webhook and platform-event triggers
@@ -539,6 +689,7 @@ Reuse Falcone HMAC webhook validation and structural tenant/workspace event rout
 - [ ] Invalid signature, expired replay window and oversized request are rejected before admission.
 - [ ] Foreign workspace identifiers cannot reroute an event.
 - [ ] Publish/update/delete registration reconciliation has no unbounded stale listeners.
+- [ ] Concurrent deliveries for one business key yield at most one open run and every signal is delivered; a caller-supplied tenant or workspace field cannot change the derived key.
 
 ## Planning
 
@@ -551,6 +702,7 @@ Reuse Falcone HMAC webhook validation and structural tenant/workspace event rout
 
 - **FR-EVT-03:** The system must authenticate webhook triggers with rotation-aware signatures, replay protection and size limits.
 - **FR-EVT-04:** The system must derive tenant and workspace from verified trigger registration rather than caller-supplied payload fields.
+- **FR-EVT-07:** For each inventoried trigger that uses start-or-signal semantics, the system must derive a tenant- and workspace-scoped business key from the verified trigger registration and event, and in one transaction either deliver the signal to the open run holding that key or start a new run and deliver the signal to it, so that concurrent deliveries for one key yield at most one open run and no lost signal.
 
 
 ## EVT-03 — Implement correlated signals and event waits
@@ -570,6 +722,7 @@ Persist ordered signal inboxes, bounded early-arrival buffers and explicit corre
 - [ ] Signal-before-wait survives restart and is consumed by its intended occurrence.
 - [ ] Duplicate and unauthorized signals do not unblock additional nodes.
 - [ ] Overflow and stale signals produce documented errors/dead-letter records without tenant data leakage.
+- [ ] Signal and approval-decision requests return accepted, rejected by validation, target not waiting, duplicate or run terminal after commit, and an invalid payload is never persisted.
 
 ## Planning
 
@@ -581,7 +734,72 @@ Persist ordered signal inboxes, bounded early-arrival buffers and explicit corre
 ## Requirements
 
 - **FR-EVT-05:** The system must persist authorized signals using deduplication IDs and explicit run/node-occurrence correlation.
-- **FR-EVT-06:** The system must define TTL, capacity and terminal-run behavior for unmatched or early-arriving signals.
+- **FR-EVT-06:** The system must take the TTL and per-run capacity for unmatched or early-arriving signals from quota policy, consume buffered signals FIFO per signal name, deduplicate them by signal ID while buffered and for the run's retention after consumption, reject a signal to a terminal run with an explicit error code and record it, and deliver a signal matching several waits to the earliest-armed node occurrence.
+- **FR-EVT-11:** The system must return, after commit, a synchronous result for signals and approval decisions (accepted, rejected by validation, target not waiting, duplicate, or run terminal), validating the payload before it is persisted.
+
+
+## EVT-04 — Add callback-token and event-or-timeout waits
+
+<!-- falcone-workflow:EVT-04 -->
+
+## User story
+
+As a flow author, I want to wait for an external callback or a correlated event with a timeout so that flows can integrate with e-signature, payment and partner systems that answer later.
+
+## Description
+
+In an additive DSL version, add a callback wait node that issues a single-use signed completion token or URL bound to tenant and node occurrence, and an event-wait node that races a correlated platform event or signal against a timeout. Tokens are bearer capabilities: keep them short-lived, never log them, revoke them on cancellation, keep tenant identifiers out of the URL path and rate-limit the endpoint per tenant.
+
+## Acceptance criteria
+
+- [ ] A callback token accepts exactly one authenticated completion; a second use, an expired or revoked token, a token for another tenant or node occurrence and an oversized or schema-invalid payload are rejected and recorded.
+- [ ] Completion, timeout and cancellation races resolve by the FR-TIM-02 ordering rule with one recorded winner.
+- [ ] Tokens never appear in logs, history or metrics, and cancelling the run revokes its outstanding tokens.
+- [ ] An event wait records whether the event or the timeout won, with the event reference; an early matching event is governed by FR-EVT-06, and matching uses the correlation-key index, never a payload scan.
+
+## Planning
+
+- Parent: EP-EVT
+- Phase: M2
+- Effort: L
+- Depends on: EVT-03, TIM-01, TEN-01
+
+## Requirements
+
+- **FR-EVT-08:** The system must provide a callback wait node that issues a single-use, signed, tenant- and node-occurrence-bound completion token or URL with an expiry, accepts exactly one authenticated completion (success, failure, or progress heartbeat) validated against a declared payload schema and size limit, and resolves completion, timeout and cancellation races with the FR-TIM-02 ordering rule.
+- **FR-EVT-12:** The system must support an event-wait node that waits for a correlated platform event or signal matching a declared filter, with a timeout, and records which condition won together with the event reference.
+
+
+## EVT-05 — Publish lifecycle events and add trigger filters
+
+<!-- falcone-workflow:EVT-05 -->
+
+## User story
+
+As a workspace administrator, I want lifecycle events and filtered triggers so that I can notify on failure, chain flows and start runs only for relevant events.
+
+## Description
+
+Define a versioned CloudEvents lifecycle catalogue for run and node-occurrence transitions, published through the outbox; node-level events are opt-in per flow. Add a CEL filter and an input mapping to platform-event and webhook triggers. Bound flow-to-flow chains with a causation ID.
+
+## Acceptance criteria
+
+- [ ] Each catalogued transition emits one CloudEvent with a stable ID through the outbox; events carry identifiers, versions and object references, and scans find no secrets or unredacted payload values.
+- [ ] Node-level lifecycle events are emitted only for flows that opt in.
+- [ ] A run started by another flow's lifecycle event carries a causation ID, and a chain that exceeds the configured depth is rejected and recorded.
+- [ ] A trigger whose filter rejects an event admits no run and records the decision in the delivery record; filter and mapping errors produce stable error codes.
+
+## Planning
+
+- Parent: EP-EVT
+- Phase: M2
+- Effort: M
+- Depends on: EVT-01, EVT-02
+
+## Requirements
+
+- **FR-EVT-09:** The system must publish versioned CloudEvents-formatted lifecycle events for run and node-occurrence transitions (started, completed, failed, cancelled, terminated, waiting for approval or callback, incident opened and resolved, SLA breached) through the outbox, carrying identifiers, versions and object references but no secrets or unredacted payload values.
+- **FR-EVT-10:** The system must support a CEL filter over the verified event and an input mapping for each platform-event and webhook trigger, evaluated before admission and recorded in the trigger's delivery record.
 
 
 - **EP-HUM — Human approvals and compensation**
@@ -605,6 +823,7 @@ Preserve existing flowApproval/human-approval semantics at the facade while bind
 - [ ] Forged actor fields are ignored or rejected; an unauthorized reviewer cannot decide.
 - [ ] Concurrent approval submissions produce one accepted decision and auditable conflicts.
 - [ ] Legacy untargeted approval behavior is explicitly fixture-tested; stricter occurrence targeting uses a versioned change.
+- [ ] Outcome fixtures contain every outcome field; rejection and timeout produce the approval.rejected and approval.timeout error types while apiVersion v1.0 run outcomes match the legacy fixtures.
 
 ## Planning
 
@@ -616,7 +835,7 @@ Preserve existing flowApproval/human-approval semantics at the facade while bind
 ## Requirements
 
 - **FR-HUM-01:** The system must derive approval actor identity from verified authentication and enforce configured reviewer permissions.
-- **FR-HUM-02:** The system must preserve approval outcome fields and distinguish rejection, timeout and cancellation.
+- **FR-HUM-02:** The system must preserve approval outcome fields as {decision, actor subject, actor display name, decided-at, comment, decision revision, source (UI or API)}, distinguish rejection, timeout and cancellation, produce the declared default outcome or the approval.timeout error type on timeout, and raise the approval.rejected error type on rejection so that error boundaries (FR-DSL-09) can route it in a new DSL version.
 
 
 ## HUM-02 — Add versioned saga compensation
@@ -660,25 +879,60 @@ As an authorized operator, I want controlled repair tools so that ambiguous outc
 
 ## Description
 
-Support retry-from-known-boundary and reconciliation acknowledgements; disallow arbitrary history edits.
+Support retry-from-known-boundary, run-level repair operations and reconciliation acknowledgements; disallow arbitrary history edits. Represent every condition that needs human resolution as a typed incident.
 
 ## Acceptance criteria
 
 - [ ] Stale revision or cross-tenant repair requests fail before mutation.
 - [ ] Preview identifies side effects that may repeat and requires a documented resolution for ambiguous tasks.
 - [ ] Every accepted repair records actor, reason, prior revision and resulting attempt lineage.
+- [ ] Pause stops new dispatch for the run and resume restarts it; retry in place, skip with a schema-valid output, set variables and rerun from a node are each fixture-tested, and an output or variable that fails its schema is rejected.
+- [ ] Each listed incident condition opens a typed incident that stops dispatch on that path and emits a lifecycle event; the incident closes only through an audited resolution action.
 
 ## Planning
 
 - Parent: EP-HUM
 - Phase: M3
 - Effort: L
-- Depends on: HUM-02, OBS-01
+- Depends on: HUM-02, OBS-01, EVT-05
 
 ## Requirements
 
-- **FR-HUM-05:** The system must require authorization, reason and expected run revision for manual repair or retry actions.
+- **FR-HUM-05:** The system must require authorization, reason and expected run revision for manual repair or retry actions, including the FR-HUM-08 run operations.
 - **FR-HUM-06:** The system must preserve original history and create explicit linked attempts or continuation records for repair.
+- **FR-HUM-08:** The system must provide authorized, audited run operations (pause and resume dispatch; retry a failed node occurrence in place; skip a node with an operator-supplied, schema-valid output; set run variables; and rerun from a selected node as a new linked run pinned to the original or an explicitly selected compatible version), each requiring the expected run revision and showing a preview of side effects that may repeat according to connector idempotency class.
+- **FR-HUM-09:** The system must represent each condition that requires human resolution (retries exhausted under an alert-only timeout policy, ambiguous external outcome, expression evaluation error, missing or hash-mismatched payload, expired or revoked credential, policy-blocked effect, undeliverable signal) as a typed incident on the affected node occurrence that stops dispatch on that path, emits a lifecycle event, and closes only through an audited resolution action.
+
+
+## HUM-04 — Add human-task forms, quorum and escalation
+
+<!-- falcone-workflow:HUM-04 -->
+
+## User story
+
+As a business process owner, I want approvals with typed forms, quorum, separation of duties and escalation so that approval steps match our review policies.
+
+## Description
+
+Extend approval nodes in an additive DSL version with a versioned response schema, assignment by user, Keycloak group or role expression, quorum rules, optional prohibition of approval by the run initiator, non-interrupting reminder and escalation timers and a declared default outcome on timeout. Resolve group membership at decision time and persist a snapshot. Notifications use lifecycle events. apiVersion v1.0 approvals are unchanged.
+
+## Acceptance criteria
+
+- [ ] A response that does not match the versioned response schema is rejected before it is persisted.
+- [ ] Any, all and N-of-M quorum rules complete only when satisfied, using HUM-01's single-winner transaction under concurrent responses; the run initiator cannot approve when that prohibition is configured.
+- [ ] Reminder and escalation timers fire without interrupting the approval, and a timeout applies the declared default outcome.
+- [ ] Every response, reassignment and escalation is audited with the group-membership snapshot used for the decision; apiVersion v1.0 approval fixtures are unchanged.
+
+## Planning
+
+- Parent: EP-HUM
+- Phase: M2
+- Effort: L
+- Depends on: HUM-01, TIM-01, EVT-05
+
+## Requirements
+
+- **FR-HUM-07:** The system must support approval nodes with a versioned response schema (choices and typed fields), assignment by user, Keycloak group or role expression, quorum rules (any, all, or N of M), optional prohibition of approval by the run initiator, reminder and escalation timers that do not interrupt the approval, and a declared default outcome on timeout. Every response, reassignment and escalation must be recorded in audit history.
 
 
 - **EP-TEN — Security, tenancy and Falcone quotas**
@@ -762,7 +1016,7 @@ Separate stored definitions, waiting runs, runnable steps, external activities a
 ## Acceptance criteria
 
 - [ ] Concurrent admissions cannot exceed a configured hard limit; expired reservations are reconciled.
-- [ ] A saturated tenant does not starve eligible work from other tenants in the benchmark.
+- [ ] With one tenant saturating its share, other tenants' p95 ready-task dispatch latency stays within the agreed factor of their unloaded baseline in the OBS-03 benchmark.
 - [ ] Billing fixtures classify retries, failures, waits and cancellations explicitly; workflow does not invent independent tariff rules.
 
 ## Planning
@@ -775,7 +1029,39 @@ Separate stored definitions, waiting runs, runnable steps, external activities a
 ## Requirements
 
 - **FR-TEN-05:** The system must consume versioned Falcone quota policy for starts, active tasks, waiting runs, retries, fan-out, payload bytes and retention.
-- **FR-TEN-06:** The system must enforce fair tenant/workspace admission with idempotent reservations, releases and usage events across crashes.
+- **FR-TEN-06:** The system must enforce fair tenant/workspace admission with idempotent reservations, releases and usage events across crashes, using weighted round-robin across tenants and then across workspaces within a tenant, with weights from quota policy.
+
+
+## TEN-04 — Add flow concurrency, rate limits and priority
+
+<!-- falcone-workflow:TEN-04 -->
+
+## User story
+
+As a workspace administrator, I want per-flow and per-key concurrency limits, rate limits and priorities so that flows respect partner limits and urgent work runs first without hurting other tenants.
+
+## Description
+
+Add optional concurrency limits per flow and per key (a bounded CEL expression over verified run input) with an overflow strategy, per-workspace named rate limits referenced by task nodes, bounded priority tiers and weighted fairness keys. Priority never overrides tenant fairness; distinct keys per workspace are capped; queued runs count as waiting runs for quota.
+
+## Acceptance criteria
+
+- [ ] A per-key limit of one admits one open run per key; queue with maximum wait, reject, cancel-newest and cancel-oldest overflow strategies produce the documented outcomes.
+- [ ] A key expression cannot reach another tenant's or workspace's scope, and the per-workspace distinct-key cap is enforced.
+- [ ] Task nodes that reference a named rate limit never exceed its units per window.
+- [ ] Higher-priority work is dispatched first only within the tenant's fair share; under contention no workspace exceeds its configured share in the benchmark.
+
+## Planning
+
+- Parent: EP-TEN
+- Phase: M2
+- Effort: L
+- Depends on: TEN-03, DSL-02
+
+## Requirements
+
+- **FR-TEN-07:** The system must enforce optional per-flow and per-key concurrency limits, where the key is a bounded CEL expression over verified run input, with a declared overflow strategy (queue with maximum wait, reject, cancel newest, or cancel oldest running), and per-workspace named rate limits (units per window) that task nodes reference, without letting any tenant-defined key cross tenant or workspace scope.
+- **FR-TEN-08:** The system must support bounded run priority tiers inherited by tasks and children, and weighted fairness keys, such that priority orders work only within a tenant's fair share and no workspace exceeds its configured share under contention.
 
 
 - **EP-INT — Falcone services and serverless integration**
@@ -796,7 +1082,7 @@ Extract engine-neutral activity context for DB, storage, functions, events, HTTP
 
 ## Acceptance criteria
 
-- [ ] Each task type has success/error/cancellation/duplicate-attempt fixtures and an explicit migration status.
+- [ ] Each task type has success/error/cancellation/duplicate-attempt fixtures, a mapping from every legacy Temporal error type it emits to its FR-ACT-07 type, and an explicit migration status.
 - [ ] HTTP SSRF tests cover redirects, DNS resolution, private/metadata targets and credential forwarding.
 - [ ] External effects run against controlled test services; existing mocks are never reported as live qualification.
 
@@ -813,7 +1099,7 @@ Extract engine-neutral activity context for DB, storage, functions, events, HTTP
 - **FR-INT-02:** The system must enforce per-connector timeout, payload, credential, egress and workspace policies before performing external calls.
 
 
-## INT-02 — Define the serverless invocation and checkpoint contract
+## INT-02 — Consume the falcone-serverless execution and checkpoint contracts
 
 <!-- falcone-workflow:INT-02 -->
 
@@ -823,13 +1109,14 @@ As a platform developer, I want one shared invocation contract so that workflow 
 
 ## Description
 
-Keep workflow state in falcone-workflow and untrusted computation in falcone-serverless; separate legacy largeTask support.
+Consume falcone-serverless's worker execution API (ctr-worker-execution-api) and job checkpoint contract (ctr-job-checkpoint) instead of defining a workflow-specific protocol. Keep workflow state in falcone-workflow and untrusted computation in falcone-serverless; the serverless Temporal-activity tasks stay while Temporal serves existing runs. Separate legacy largeTask support.
 
 ## Acceptance criteria
 
-- [ ] A contract simulator tests submit acknowledgement loss, duplicate completion, stale cancellation and checkpoint references.
-- [ ] An ADR records ownership of execution leases, logical retries, metering and checkpoint retention.
+- [ ] A contract simulator built from the pinned serverless contract versions tests submit acknowledgement loss, duplicate completion, stale cancellation and checkpoint references.
+- [ ] An ADR records the consumed contract versions and the ownership of execution leases, logical retries, metering and checkpoint retention.
 - [ ] Legacy largeTask profiles incompatible with restricted Wasm execution are flagged; no silent native-container fallback is permitted.
+- [ ] A gap found in a serverless contract becomes a falcone-serverless issue; no local workaround protocol is added.
 
 ## Planning
 
@@ -840,7 +1127,7 @@ Keep workflow state in falcone-workflow and untrusted computation in falcone-ser
 
 ## Requirements
 
-- **FR-INT-03:** The system must define versioned start/status/cancel/result callbacks with stable operation keys, authenticated correlation and explicit cancellation outcomes.
+- **FR-INT-03:** The system must invoke falcone-serverless through pinned versions of ctr-worker-execution-api and ctr-job-checkpoint with stable operation keys, authenticated correlation and explicit cancellation outcomes, and must not define a parallel workflow-specific execution or checkpoint protocol.
 - **FR-INT-04:** The system must avoid a runtime dependency cycle: falcone-serverless execution primitives must run without calling Temporal or requiring falcone-workflow to execute themselves.
 
 
@@ -861,6 +1148,7 @@ Use a provider-neutral Falcone S3 interface and submit/status/collect/cancel pha
 - [ ] An interrupted LLM batch resumes polling the same provider job; ambiguous submit is reconciled.
 - [ ] Missing or hash-mismatched objects fail explicitly; no cross-tenant object can be dereferenced.
 - [ ] SeaweedFS or another configured S3 provider passes the adapter contract before deployment; backend identity is recorded.
+- [ ] A payload over the inline threshold is stored by reference, and exceeding the per-run or per-node maximum fails with an explicit error.
 
 ## Planning
 
@@ -871,7 +1159,7 @@ Use a provider-neutral Falcone S3 interface and submit/status/collect/cancel pha
 
 ## Requirements
 
-- **FR-INT-05:** The system must store large payloads through tenant-scoped Falcone object references with content hashes, retention metadata and authorization checks.
+- **FR-INT-05:** The system must store large payloads through tenant-scoped Falcone object references with content hashes, retention metadata and authorization checks, using a configured inline threshold and per-run and per-node maximum referenced bytes that are part of quota policy and recorded in the policy snapshot, and failing explicitly when a limit is exceeded.
 - **FR-INT-06:** The system must persist provider job IDs and bounded poll schedules for batch tasks, including cancellation cleanup and credential expiry.
 
 
@@ -972,6 +1260,67 @@ Publish reproducible load, soak and fault-injection profiles; treat numerical ta
 - **FR-OBS-06:** The project must publish achieved availability, latency and recovery results against an agreed workload and resource budget before production cutover.
 
 
+## OBS-04 — Add SLA and deadline alerts
+
+<!-- falcone-workflow:OBS-04 -->
+
+## User story
+
+As a workspace administrator, I want deadlines on flows and nodes so that I am alerted, or the run is failed or cancelled, when work is late.
+
+## Description
+
+Evaluate declared per-flow and per-node deadlines, measured from run start, a schedule's nominal time or approval assignment, with durable timers; record SLA events and apply the configured action.
+
+## Acceptance criteria
+
+- [ ] A breached deadline records one SLA event and emits the SLA-breached lifecycle event, including after an engine restart.
+- [ ] Notify-only leaves the run running; fail and cancel apply the FR-CON-07 semantics.
+- [ ] Deadlines measured from run start, schedule nominal time and approval assignment have fixtures, including a run that completes in time and raises no event.
+
+## Planning
+
+- Parent: EP-OBS
+- Phase: M2
+- Effort: M
+- Depends on: OBS-02, EVT-05, TIM-01, CON-02
+
+## Requirements
+
+- **FR-OBS-07:** The system must evaluate declared per-flow and per-node deadlines (maximum duration from run start, from a schedule's nominal time, or from approval assignment) and on breach must record an SLA event and apply the configured action: notify only, fail, or cancel.
+
+
+## OBS-05 — Add run search, labels and search attributes
+
+<!-- falcone-workflow:OBS-05 -->
+
+## User story
+
+As an operator or tenant user, I want to search and count runs by status, flow and business attributes so that I can find, for example, all failed runs for one customer this week.
+
+## Description
+
+Index run status, flow, version, time range, trigger, initiator and bounded user-defined labels or typed search attributes in PostgreSQL with per-workspace limits; no separate visibility store.
+
+## Acceptance criteria
+
+- [ ] Filtered list and count queries return only runs of the caller's workspace, with stable pagination under concurrent inserts.
+- [ ] Attribute count, key length and value size limits are enforced at start and when a node sets an attribute.
+- [ ] Supported filters use indexes at the OBS-03 benchmark data volume.
+- [ ] Labels and attributes follow payload retention and redaction rules.
+
+## Planning
+
+- Parent: EP-OBS
+- Phase: M2
+- Effort: M
+- Depends on: OBS-01, TEN-01
+
+## Requirements
+
+- **FR-OBS-08:** The system must let authorized users list and count runs within a workspace by status, flow, version, time range, trigger, initiator, and bounded user-defined labels or typed search attributes set at start or by nodes, with indexed filters, stable pagination and per-workspace limits on attribute count, key length and value size.
+
+
 - **EP-OPS — Deployment, CI/CD and operations**
 
 Operate as a restricted Falcone service without administrator-installed runtimes.
@@ -986,13 +1335,14 @@ As a platform operator, I want ordinary namespaced deployment so that restricted
 
 ## Description
 
-Provide containers, Helm manifests, migrations, health probes and documented external service requirements.
+Provide containers, migrations, health probes and documented external service requirements; the Helm chart lives in gntik-ai/falcone-charts.
 
 ## Acceptance criteria
 
 - [ ] Install in a restricted namespace with no permission to create cluster-scoped resources.
 - [ ] Document pre-provisioned namespace, RBAC, DB, gateway and network prerequisites and pass readiness checks.
-- [ ] Test the agreed Kubernetes minors and actual corporate OpenShift version; unsupported versions fail qualification rather than being assumed.
+- [ ] Cluster tests run in dedicated fw-test-* namespaces on the shared k3s cluster with Pod Security restricted standing in for OpenShift restricted-v2, may read in-falcone-staging and touch no other namespace; the actual corporate OpenShift version is qualified before production rather than assumed.
+- [ ] The engine never exceeds its database connection budget under load, and exhausting the budget does not affect Falcone's own database.
 
 ## Planning
 
@@ -1003,7 +1353,7 @@ Provide containers, Helm manifests, migrations, health probes and documented ext
 
 ## Requirements
 
-- **FR-OPS-01:** The system must deploy using existing PostgreSQL and standard namespaced resources without mandatory CRDs, operators, cluster roles or privileged containers.
+- **FR-OPS-01:** The system must deploy using its own database on the shared PostgreSQL cluster within a declared connection budget, and standard namespaced resources without mandatory CRDs, operators, cluster roles or privileged containers.
 - **FR-OPS-02:** The system must run as non-root with arbitrary allowed UID, read-only root filesystem, dropped capabilities and no host access.
 
 
@@ -1034,7 +1384,7 @@ Use expand/contract schema migrations, drain behavior, PostgreSQL HA and coordin
 
 ## Requirements
 
-- **FR-OPS-03:** The system must support rolling compatible upgrades, bounded graceful drain and documented rollback limits for schema and interpreter changes.
+- **FR-OPS-03:** The system must support rolling compatible upgrades, bounded graceful drain and documented rollback limits for schema and interpreter changes, retaining every interpreter version referenced by an open run for at least the longest permitted remaining wait.
 - **FR-OPS-04:** The project must provide tested runbooks for database failover, backup restore, stuck runs, queue overload and key rotation.
 
 
@@ -1048,11 +1398,11 @@ As a maintainer, I want enforceable release gates so that durability regressions
 
 ## Description
 
-Add contract suites, concurrency/fault tests, supply-chain checks and named ownership responsibilities.
+The repository seed already provides the CI bootstrap (typecheck, unit tests and the generated-documentation check). Add contract suites, concurrency/fault tests, supply-chain checks and named ownership responsibilities.
 
 ## Acceptance criteria
 
-- [ ] CI checks generated backlog integrity and runs a real PostgreSQL integration suite once implementation exists.
+- [ ] CI keeps checking generated backlog integrity and runs a real PostgreSQL integration suite in fw-test-* namespaces once implementation exists.
 - [ ] Images have pinned dependencies, SBOMs and signed release artifacts; copied upstream code has documented provenance.
 - [ ] An ownership/runbook review names escalation and patch responsibilities; documentation alone cannot mark runtime qualified.
 
@@ -1067,6 +1417,37 @@ Add contract suites, concurrency/fault tests, supply-chain checks and named owne
 
 - **FR-OPS-05:** The project must gate releases on contract, isolation, state-machine fault, schema-migration and dependency-security checks.
 - **FR-OPS-06:** The project must assign accountable runtime maintenance, SRE on-call, security review and Falcone product ownership before production release.
+
+
+## OPS-04 — Provide bulk run operations and operator tooling
+
+<!-- falcone-workflow:OPS-04 -->
+
+## User story
+
+As an operator, I want to act on many runs at once with the same safeguards as single-run repair so that incidents affecting many runs can be resolved quickly and safely.
+
+## Description
+
+Apply cancel, terminate, pause, resume and retry to a filtered set of runs in one workspace as a resumable, rate-limited batch with a dry-run count, and expose the HUM-03 run-level repair operations and bulk operations through the operator API and CLI with the same authorization and audit.
+
+## Acceptance criteria
+
+- [ ] A dry run returns the number of matching runs without changing any run.
+- [ ] A batch respects its rate limit, resumes after an engine restart without applying an operation twice to one run, and reports a per-run outcome.
+- [ ] A filter cannot match runs outside the caller's workspace.
+- [ ] One audit record references all affected runs, and each run's history records the operation.
+
+## Planning
+
+- Parent: EP-OPS
+- Phase: M3
+- Effort: M
+- Depends on: HUM-03, CON-02, OBS-05
+
+## Requirements
+
+- **FR-OPS-07:** The system must apply cancel, terminate, pause, resume and retry to a filtered set of runs within one workspace as a resumable, rate-limited batch with a dry-run count, per-run outcome and a single audit record referencing all affected runs.
 
 
 - **EP-MIG — Temporal migration and retirement**
@@ -1090,6 +1471,7 @@ Inventory deployed DSLs, open runs, schedules, Temporal patches and SDK usage; u
 - [ ] Cover sequence, parallel, branches, approval/cancel races, children, batch polling, retries and schedule errors.
 - [ ] Track each incompatible semantic with owner and resolution; do not copy Temporal history into native tables.
 - [ ] Record the actual deployed image/source baseline separately from repository inspection.
+- [ ] Measure starts per second, committed transitions per run, open waits, schedule count and retention on the current Temporal staging deployment (read-only in in-falcone-staging) and publish them as the capacity baseline.
 
 ## Planning
 
