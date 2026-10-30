@@ -1,6 +1,8 @@
 # ADR-0012: Durable history, resumable SSE and bounded archival
 
-Status: Proposed
+Status: Accepted (2026-10-30)
+
+Accepted by the operator on 30 October 2026 as written.
 
 ## Context
 

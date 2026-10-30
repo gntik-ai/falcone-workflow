@@ -1,6 +1,8 @@
 # ADR-0013: M0 capacity baseline and qualification benchmarks
 
-Status: Proposed
+Status: Accepted (2026-10-30)
+
+Accepted by the operator on 30 October 2026 as written.
 
 ## Context
 

@@ -1,6 +1,8 @@
 # ADR-0011: Long-lived run authority, renewal and revocation
 
-Status: Proposed
+Status: Accepted (2026-10-30)
+
+Accepted by the operator on 30 October 2026 as written. The operator explicitly gave the R3 approval this ADR requires.
 
 ## Context
 

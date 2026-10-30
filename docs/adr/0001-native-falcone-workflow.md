@@ -1,6 +1,6 @@
 # ADR-0001: Native Falcone workflow engine
 
-Status: Accepted (2026-10-30). Proposed 22 October 2026; the operator accepted the direction with decisions D1–D8 below on 30 October 2026.
+Status: Accepted (2026-10-30). Proposed 22 October 2026; the operator accepted the direction with decisions D1–D8 below on 30 October 2026. The maximum permitted wait, open at acceptance, was later set to 12 months (ADR-0009).
 
 ## Context
 
@@ -31,4 +31,4 @@ Embedded DBOS, Conductor/Dapr runtime and full code replay are evaluated in ../t
 
 ## Still open
 
-Named operational ownership, the security qualification of the deployed cluster, the maximum permitted wait and the remaining product questions in ../open-questions.md. Acceptance of this ADR does not qualify any runtime.
+Named operational ownership, the security qualification of the deployed cluster and the remaining product questions in ../open-questions.md. Acceptance of this ADR does not qualify any runtime.

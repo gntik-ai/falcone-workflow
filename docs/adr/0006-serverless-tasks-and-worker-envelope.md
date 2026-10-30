@@ -1,6 +1,8 @@
 # ADR-0006: Serverless function and job tasks and the ACT-01 envelope
 
-Status: Proposed
+Status: Accepted (2026-10-30)
+
+Accepted by the operator on 30 October 2026 as written.
 
 ## Context
 
@@ -25,3 +27,7 @@ Persist an accepted provider job ID and checkpoint reference before further obse
 ## Consequences
 
 Contract locations, versions and ACT-01 envelope reuse remain explicit owner-confirmation gates. Simulators must be derived from confirmed contracts before they count as integration evidence. Missing capabilities are findings for the owning repository, not implementations in this ChangeSet.
+
+## Operator resolution (2026-10-30)
+
+The contract owners and versions are confirmed (finding F05): `ctr-worker-execution-api` v1 is defined by [falcone-serverless #124](https://github.com/gntik-ai/falcone-serverless/issues/124) and served by [falcone-serverless #130](https://github.com/gntik-ai/falcone-serverless/issues/130). `ctr-job-checkpoint` v1 is falcone-serverless plan task JOB-01.t1 (target `gntik-ai/falcone`, component functions-api), not yet published as an issue; it is a dependency to link when published. Exact API paths and versions are confirmed from the delivered code as an integration gate; this does not block decomposition. The ACT-01 envelope review above still applies.
