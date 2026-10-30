@@ -25,5 +25,15 @@ The initial recommendation is a native Falcone DSL interpreter with transactiona
 
 `docs/planning-source.json` is the structured source for requirements and issue payloads. Run `python3 tools/build_docs.py` to regenerate `requirements.md`, `backlog.md` and `backlog.json`. The generator validates unique issue IDs, complete requirement coverage and dependency cycles. Regeneration does not modify GitHub issues.
 
-No upstream implementation has been copied. A project license and code-reuse policy must be selected before implementation.
+No upstream implementation has been copied. The project is MIT licensed, like Falcone ([LICENSE](LICENSE)); reuse of third-party code needs review.
+
+## Build
+
+```sh
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm test
+```
+
+See [AGENTS.md](AGENTS.md) for the operator decisions, repository split and testing rules.
 
