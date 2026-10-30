@@ -12,7 +12,7 @@ Implement explicit durable DSL continuation in PostgreSQL behind Falcone's exist
 
 Operator decisions (2026-10-30):
 
-- **D1 Repository split.** Engine, evaluator, scheduler/timer/lease services and trusted task workers in `gntik-ai/falcone-workflow`; workflow facade, backend routing, console, CLI, quotas, admission and service adapters in `gntik-ai/falcone`; Helm chart in `gntik-ai/falcone-charts`. A story spanning repositories is split into one issue per repository.
+- **D1 Repository split.** Engine, evaluator, scheduler/timer/lease services and trusted task workers in `gntik-ai/falcone-workflow`; workflow facade, backend routing, console, CLI, quotas, admission and service adapters in `gntik-ai/falcone`; Helm chart in `gntik-ai/falcone-charts`. A story spanning repositories is split into one issue per repository. Stories and epics are product-level and may span repositories; the backlog decomposition turns each story into technical issues, one per repository, each with a single owner and explicit cross-repository dependencies.
 - **D2 Language.** The engine is TypeScript on Node.js. Go is no longer an M0 alternative.
 - **D3 No raw Temporal compatibility.** Falcone's workflow API and DSL stay the public contract. Both engines run behind the Falcone facade during migration; existing Temporal runs finish on Temporal.
 - **D4 Shared contracts.** falcone-workflow consumes falcone-serverless's worker execution API (`ctr-worker-execution-api`) and job checkpoint contract (`ctr-job-checkpoint`) and the shared Falcone outbox/inbox and lease/fencing module built by falcone-serverless story STO-03, instead of defining its own. INT-02 consumes those contracts. The serverless Temporal-activity tasks stay while Temporal serves existing runs.

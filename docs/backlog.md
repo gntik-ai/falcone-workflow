@@ -752,7 +752,8 @@ In an additive DSL version, add a callback wait node that issues a single-use si
 
 ## Acceptance criteria
 
-- [ ] A callback token accepts exactly one authenticated completion; a second use, an expired or revoked token, a token for another tenant or node occurrence and an oversized or schema-invalid payload are rejected and recorded.
+- [ ] Progress heartbeats with a valid token are accepted repeatedly before the terminal completion, never resolve the wait and are rejected after it; a duplicate heartbeat sequence number is a no-op.
+- [ ] A callback token accepts exactly one authenticated terminal completion; a second terminal use, an expired or revoked token, a token for another tenant or node occurrence and an oversized or schema-invalid payload are rejected and recorded.
 - [ ] Completion, timeout and cancellation races resolve by the FR-TIM-02 ordering rule with one recorded winner.
 - [ ] Tokens never appear in logs, history or metrics, and cancelling the run revokes its outstanding tokens.
 - [ ] An event wait records whether the event or the timeout won, with the event reference; an early matching event is governed by FR-EVT-06, and matching uses the correlation-key index, never a payload scan.
@@ -766,7 +767,7 @@ In an additive DSL version, add a callback wait node that issues a single-use si
 
 ## Requirements
 
-- **FR-EVT-08:** The system must provide a callback wait node that issues a single-use, signed, tenant- and node-occurrence-bound completion token or URL with an expiry, accepts exactly one authenticated completion (success, failure, or progress heartbeat) validated against a declared payload schema and size limit, and resolves completion, timeout and cancellation races with the FR-TIM-02 ordering rule.
+- **FR-EVT-08:** The system must provide a callback wait node that issues a single-use, signed, tenant- and node-occurrence-bound completion token or URL with an expiry, accepts exactly one authenticated terminal completion (success or failure) validated against a declared payload schema and size limit, accepts authenticated non-terminal progress heartbeats with the same token until that completion (each heartbeat is idempotent by sequence number, only refreshes progress and the optional heartbeat timeout, and never consumes the token or resolves the wait), and resolves completion, timeout and cancellation races with the FR-TIM-02 ordering rule.
 - **FR-EVT-12:** The system must support an event-wait node that waits for a correlated platform event or signal matching a declared filter, with a timeout, and records which condition won together with the event reference.
 
 
