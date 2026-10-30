@@ -21,7 +21,7 @@ Numbers follow the requested topic order. Each row maps to exactly one new file;
 | [ADR-0008](adr/0008-timers-and-schedule-policies.md) | Durable timers and explicit schedule calendar policies | 7: time zones, overlap, catch-up and DST |
 | [ADR-0009](adr/0009-versioning-and-long-wait-retention.md) | Pinned versions, long-wait retention and native run migration | 8: D8 retention and DSL-06 |
 | [ADR-0010](adr/0010-dual-engine-migration.md) | Dual-engine routing, drainage and schedule cutover | 9: D3 migration, rollback and Temporal drainage |
-| [ADR-0011](adr/0011-long-lived-run-credentials.md) | Long-lived run authority, renewal and revocation | 10: credential lineage and current authorization |
+| [ADR-0011](adr/0011-long-lived-run-authority.md) | Long-lived run authority, renewal and revocation | 10: credential lineage and current authorization |
 | [ADR-0012](adr/0012-history-sse-and-archival.md) | Durable history, resumable SSE and bounded archival | 11: history projection, retention and restore |
 | [ADR-0013](adr/0013-m0-capacity-and-benchmarks.md) | M0 capacity baseline and qualification benchmarks | 12: Temporal staging baseline and native measurement plan |
 
