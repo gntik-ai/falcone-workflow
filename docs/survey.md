@@ -33,6 +33,26 @@ Temporal does not intrinsically require privileged tenant pods or an operator. R
 
 Cadence, Conductor, Airflow, Dapr and DBOS provide five open-source references beyond Temporal. Maturity is not identical: Temporal/Cadence and Airflow have longer operating histories; evaluate DBOS and individual Dapr workflow SDKs against the actual Falcone workload rather than assuming feature parity.
 
+## Functional references from the gap analysis (30 October 2026)
+
+A functional gap analysis compared capabilities across 16 products. It added the 11 below and re-checked Temporal, Conductor OSS, Airflow 3.x, Restate and DBOS for capabilities this survey had not compared: Temporal updates, priority/fairness, the schedule policy set, reset/batch operations and parent-close policy; Conductor timeout policies, rate limits, rerun/skip and its test API; Airflow 3 human-in-the-loop operators, deadline alerts and backfill reprocess modes; DBOS queue flow control (the closest PostgreSQL-native reference for TEN-03 and TEN-04); Restate awakeables. Products are pattern references; none is adopted. Source-available products are **design references only**: no code is copied from them.
+
+| Product | License class | What Falcone borrows |
+|---|---|---|
+| Argo Workflows | Apache-2.0 | Retry strategy with expressions; mutex/semaphore synchronization; cron concurrency policy, time zone and documented DST behavior; parameter fan-out; archive TTL |
+| Camunda 8 / Zeebe | Camunda License 1.0, source-available; production licence required for self-managed since 8.6. **Design reference only** | Typed incidents; instance migration with mapping instructions; instance modification; multi-instance with completion condition; message correlation with TTL buffering; error boundary events; user-task assignment, due dates and escalation |
+| Kestra | Apache-2.0; enterprise features proprietary | Concurrency overflow (queue, cancel, fail); missed-schedule recovery and pausable backfill; SLA actions; replay from a task; error branches, allow-failure and after-execution handlers |
+| Prefect 3 | Apache-2.0 | Concurrency slots with leases and rate limits; typed wait-for-input; automations including absence-of-event triggers |
+| n8n | Sustainable Use License (fair-code, not OSI open source). **Design reference only** | Error workflows; Wait node resumed by an authenticated URL or form with a wait limit |
+| Windmill | Apache-2.0 / AGPLv3 plus a proprietary enterprise edition. **Design reference only** | Approval count, self-approval prohibition, group restriction, form schema and continue-on-timeout; concurrency limits with custom keys |
+| Hatchet | MIT | CEL concurrency keys with round-robin and cancel strategies; static and dynamic rate limits; priority tiers; durable sleep/event or-groups |
+| Inngest | SSPL-1.0 with a future Apache-2.0 licence. **Design reference only** | Flow control (concurrency, throttling, debounce, priority, batching); cancel-on-event; wait-for-event with match and timeout; idempotency window |
+| Serverless Workflow / Open Workflow DSL | CNCF specification; license not reviewed | Task vocabulary (try/catch/raise, competing fork, listen-until, for); retry when/except-when/jitter; RFC 7807 error types; workflow and task lifecycle CloudEvents |
+| Dagster | Apache-2.0 | Sensor `run_key` deduplication as a precedent for start-or-signal; partitions and backfills |
+| Flyte | Apache-2.0 | Typed task interfaces; map tasks with partial-failure tolerance; gate nodes |
+
+Restate (BSL 1.1, above) is also a design reference only. The patterns adopted from these products are the gap-analysis requirements in section 2 and stories CON-04, DSL-04 to DSL-06, EVT-04, EVT-05, HUM-04, TEN-04, OBS-04, OBS-05 and OPS-04; deferred and rejected patterns are in section 6. Sources are listed under "Functional gap analysis references".
+
 ## Falcone integration implications
 
 For every alternative, Keycloak authentication, Falcone workspace roles and quota policy need an application-specific authorization layer. S3 is suitable for large payload references, not an automatic replacement for the engine's transactional state. A function invocation adapter is required for falcone-serverless. Multi-tenancy must cover database predicates, events, histories, callbacks and credentials; an engine namespace or task queue alone is not an untrusted-code isolation boundary.
@@ -41,5 +61,5 @@ Adopt patterns rather than cloning engines: durable transitions from Temporal/Ca
 
 ## Licensing and reuse
 
-Inspected repository pages identify Cadence and Conductor as Apache-2.0 and DBOS TypeScript as MIT. Pin exact upstream revisions and inspect component licenses before reusing code. Current Restate license specifies BSL 1.1 and a future change license; “public repository” must not be equated with open-source reuse permission. No upstream code is included in this proposal. [C1, N1, B2, R2]
+Inspected repository pages identify Cadence and Conductor as Apache-2.0 and DBOS TypeScript as MIT. Pin exact upstream revisions and inspect component licenses before reusing code. Current Restate license specifies BSL 1.1 and a future change license; “public repository” must not be equated with open-source reuse permission. Camunda 8, Inngest, n8n, Windmill and Restate are source-available or not OSI open source and are design references only. Falcone itself, and this service, are MIT-licensed (D6). No upstream code is included in this proposal. [C1, N1, B2, R2]
 

@@ -27,20 +27,28 @@ Timer scanning and lease recovery are engine roles. The evaluator does not call 
 | Component | Initial choice | Why |
 |---|---|---|
 | Public facade | Existing Falcone Node.js service and existing authentication boundary | Preserve route, role, error and console contracts |
-| Engine | TypeScript/Node.js with explicit persisted DSL state machine; Go is an M0 benchmark alternative | Reuse schema/CEL/task semantics and contributor skills; avoid a second language before measurement justifies it |
-| Persistence | PostgreSQL, dedicated workflow schema, application RLS role and separate migration role | Transactions can atomically commit state and work; operationally familiar to Falcone |
-| Scheduler | Durable SQL timers and ready queues, bounded row claims using SKIP LOCKED, leases and fencing | No leader required for correctness; DB locks alone do not establish fairness |
+| Engine | TypeScript/Node.js with explicit persisted DSL state machine (D2) | Reuse schema/CEL/task semantics and contributor skills; one language with the facade and adapters |
+| Persistence | Separate database on the shared PostgreSQL cluster (D5), application RLS role, separate migration role and a connection budget | Transactions can atomically commit state and work; operationally familiar to Falcone; workflow load is isolated from Falcone's own database |
+| Scheduler | Durable SQL timers and ready queues, bounded row claims using SKIP LOCKED, leases and fencing from the shared Falcone lease/fencing module (D4) | No leader required for correctness; DB locks alone do not establish fairness |
 | Worker transport | Versioned internal HTTP/JSON initially; optional gRPC after profiling | Keep worker integration debuggable and accessible to existing adapters |
-| Event transport | Existing Falcone Kafka plus SQL inbox/outbox | Reuse infrastructure; broker is not the state authority |
-| User computation | Qualified falcone-serverless profiles | Centralize untrusted-code isolation; engine interprets data only |
+| Event transport | Existing Falcone Kafka plus the shared Falcone outbox/inbox module (D4) | Reuse infrastructure; broker is not the state authority |
+| User computation | Qualified falcone-serverless profiles through `ctr-worker-execution-api` and `ctr-job-checkpoint` (D4) | Centralize untrusted-code isolation; engine interprets data only |
 | Large payloads | Falcone S3 adapter, configured provider | Preserve tenant/object policy and avoid hard-wiring provider-specific semantics |
 | Secrets | Existing Falcone credential/secret services; Keycloak for user identity | No additional user directory or long-lived tokens in workflow history |
 | Observability | OpenTelemetry, Prometheus-compatible metrics, structured logs, existing SSE facade | One Falcone user experience and operator tooling |
-| Packaging | OCI images and Helm with standard namespaced resources | Fits restricted Kubernetes/OpenShift without mandatory operator/CRDs |
+| Packaging | OCI images; Helm chart in falcone-charts (D1) with standard namespaced resources | Fits restricted Kubernetes/OpenShift without mandatory operator/CRDs |
 
-Node is a starting recommendation, not a performance guarantee. Isolate bounded CEL evaluation in worker processes and persist outcomes. If a Go core is selected, use differential CEL/JSON fixtures to prove numeric/null/error and output equivalence; “same expression language” is not sufficient evidence.
+TypeScript on Node.js is decided (D2), but it is not a performance guarantee. Isolate bounded CEL evaluation in worker processes and persist outcomes; pin the CEL library version per interpreter version.
 
-Use a shared PostgreSQL cluster only with explicit CPU/IO/connection budgets and tested failure isolation. Move to a dedicated instance before workflow traffic harms product transactions. PostgreSQL HA, backup and encryption must already be provided or provisioned through the platform team; namespaced installation does not grant those capabilities automatically.
+The engine's database shares the PostgreSQL cluster with Falcone (D5), so it needs explicit CPU/IO/connection budgets and tested failure isolation. Move to a dedicated instance before workflow traffic harms product transactions. PostgreSQL HA, backup and encryption must already be provided or provisioned through the platform team; namespaced installation does not grant those capabilities automatically.
+
+## Repository placement and shared contracts
+
+The engine, evaluator, scheduler, timer and lease services and the trusted task workers are built in falcone-workflow. The facade, backend routing, console, CLI, quotas, admission and service adapters are built in falcone, and the Helm chart in falcone-charts (D1). A story that spans these repositories is decomposed into one issue per repository. Stories and epics are product-level and may span repositories; the backlog decomposition turns each story into technical issues, one per repository, each with a single owner and explicit cross-repository dependencies.
+
+falcone-workflow does not define its own serverless invocation, checkpoint, outbox/inbox or lease protocols (D4). Function and large-task execution use falcone-serverless's `ctr-worker-execution-api` and `ctr-job-checkpoint`; outbox/inbox delivery and lease fencing use the shared Falcone module that falcone-serverless story STO-03 builds. The serverless Temporal-activity tasks remain while Temporal serves existing runs. Gaps in a shared contract are raised as issues in the owning repository.
+
+Additive DSL features from the functional gap analysis (error boundaries, map, callback and event waits, human-task forms, concurrency keys and priorities) are interpreter features in falcone-workflow; their search, bulk-operation and approval surfaces in the console and CLI are falcone work. apiVersion v1.0 definitions keep their inventoried semantics.
 
 ## Data model and invariants
 
@@ -53,7 +61,8 @@ All logical keys include tenant and workspace, including definition versions, ru
 - **run_events:** append-only sequence per run; payloads are bounded/redacted and may refer to object storage.
 - **timers / schedules / occurrences:** database timestamps, calendar policy and unique occurrence IDs.
 - **inbox / outbox:** event IDs, tenant scope, delivery state, expiration and backoff.
-- **approvals / compensations:** authenticated actor, target occurrence, decision revision and cleanup progress.
+- **approvals / compensations:** authenticated actor, target occurrence, decision revision, group-membership snapshot and cleanup progress.
+- **incidents:** typed needs-attention records on node occurrences, opened by retries exhausted, ambiguous outcomes, expression errors, missing payloads, credential expiry, policy blocks or undeliverable signals, and closed only by audited resolution.
 - **credential_references / quota_reservations:** opaque handles and authoritative lineage/accounting; never raw tokens in event history.
 
 A transaction checks the run revision, writes one or more ordered events, updates the explicit continuation state, inserts next tasks/timers and outbox/audit records, then commits. Unique constraints guard admission and completion. Snapshot reconstruction uses a pure versioned reducer and never re-executes side effects. This is explicit DSL state persistence, not replay of arbitrary JavaScript stacks.
@@ -90,7 +99,7 @@ Upload large objects under immutable scoped keys, verify completion/hash, then c
 
 ## Capacity and service objectives — proposals, not promises
 
-The earlier serverless estimates were 20 tenants, 10,000 deployed functions, approximately 100k WebSocket/event messages per second and about 20 concurrent executions per tenant. These are not measured workflow workload figures. Workflow starts, step transitions, open waits, concurrent activities and retained history each need independent estimates.
+The capacity baseline is measured on the current Temporal staging deployment during M0 (MIG-01). The earlier serverless estimates were 20 tenants, 10,000 deployed functions, approximately 100k WebSocket/event messages per second and about 20 concurrent executions per tenant. These are not measured workflow workload figures. Workflow starts, step transitions, open waits, concurrent activities and retained history each need independent estimates.
 
 For sizing, transitions/s is approximately starts/s × mean committed transitions/run, plus signals, timer resumptions and retry transitions. Retained bytes depend on event count, metadata size and retention, not only active execution count. Waiting for months consumes storage and timer/index overhead, not an active execution slot unless Falcone policy explicitly chooses that billing rule.
 
@@ -111,15 +120,3 @@ Benchmark tiers should cover 10/100/1,000 starts per second as exploration point
 Retain Falcone API/gateway, Keycloak, PostgreSQL, Kafka, S3 interface, secret management, console and observability. Replace Temporal server coordination, SDK client calls, interpreter primitives, activities' Temporal Context, schedules, history projection and ancestry checks. Rewrite metadata bindings while preserving public contracts. Keep legacy workers and Temporal during drainage.
 
 Do not require a new Redis, Elasticsearch, Dapr or Conductor deployment for the baseline. Native execution does not require Kubernetes API access; only optional trusted existing large-task adapters may need tightly scoped namespaced job access. Their compatibility with the restrictive untrusted-code policy must be qualified separately.
-
-## Ownership
-
-- **Falcone product owner:** supported semantics, DSL evolution, quotas, compatibility and rollout acceptance.
-- **Workflow/runtime maintainers:** state machine, persistence migrations, interpreter versions, connector protocol and correctness tests.
-- **Falcone integration team:** facade, console, identity, billing and task adapters.
-- **SRE/platform team:** database HA, deployment, dashboards, backups, capacity, on-call incidents and recovery exercises.
-- **Security engineers:** threat model, expression isolation, credential lineage, tenant boundary tests, dependency review and security release qualification.
-- **Release/QA maintainers:** contract fixtures, crash matrices, compatibility gates and evidence retention.
-
-A small team may combine roles, but accountable owners and an escalation rota must exist before production.
-
