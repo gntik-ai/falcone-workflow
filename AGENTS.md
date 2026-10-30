@@ -41,7 +41,7 @@ python3 tools/build_docs.py && git diff --exit-code -- docs/
 
 ## Cluster testing (operator decision, 2026-10-30)
 
-- Every runtime test runs on the shared cluster, in dedicated `fw-test-*` namespaces created and deleted by the test.
+- Unit and contract tests run locally and in CI. Every integration, runtime or end-to-end test that needs Kubernetes, PostgreSQL, Kafka or Falcone services runs on the shared cluster, in dedicated `fw-test-*` namespaces created and deleted by the test.
 - Integration tests may also read `in-falcone-staging`. Every other namespace is off limits, including `family-rentals-prod`, `musematic*` and `llmwiki*`.
 - The cluster is k3s, not OpenShift. Pod Security "restricted" with seccomp `RuntimeDefault`, a read-only root filesystem and an arbitrary non-root UID stand in for OpenShift restricted-v2.
 - Never print or commit secrets.
