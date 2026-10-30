@@ -1,6 +1,8 @@
 # ADR-0008: Durable timers and explicit schedule calendar policies
 
-Status: Proposed
+Status: Accepted (2026-10-30)
+
+Accepted by the operator on 30 October 2026 as written.
 
 ## Context
 

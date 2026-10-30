@@ -1,7 +1,7 @@
 {
   "baseline_commit": "47674add95223e6ccd7f6f0dcd11106469a0a30e",
   "date": "2026-10-30",
-  "status": "architecture direction accepted 2026-10-30 (ADR 0001); remaining scope in open-questions.md",
+  "status": "architecture direction and ADRs 0001-0013 accepted 2026-10-30; remaining scope in open-questions.md",
   "categories": [
     {
       "code": "CON",
@@ -169,14 +169,14 @@
           ],
           "requirements": [
             "The system must pin each run to immutable definition and interpreter versions and each child to an authorized explicit definition version; child behavior on parent cancellation, termination, failure or timeout follows FR-DSL-07.",
-            "The system must reject unsupported historical versions, require an explicit audited migration plan before changing active-run semantics, and retain every interpreter and definition version referenced by an open run for at least the longest permitted remaining wait, or migrate the run through FR-DSL-11."
+            "The system must reject unsupported historical versions, require an explicit audited migration plan before changing active-run semantics, and retain every interpreter and definition version, and every other artifact a run pins, for at least 12 months (W_max) after the last run that pins it closes; migrating a run through FR-DSL-11 moves that run's pins to the target version but never shortens the retention of the versions it pinned before."
           ],
           "acceptance": [
             "Publishing a new definition leaves active parent and child runs unchanged.",
             "A rolling upgrade with old/new evaluators completes compatible runs and leaves unsupported runs safely parked.",
             "Bounded sub-flow depth and expanded graph size prevent recursive resource exhaustion.",
             "Cancelling, terminating, failing or timing out a parent applies the inventoried legacy child policy (Temporal's default is terminate) in fixtures; an abandoned child still counts against its tenant's quota.",
-            "An upgrade cannot remove an interpreter or definition version while an open run references it."
+            "An upgrade cannot remove an interpreter or definition version, or another pinned artifact, while an open run references it or within 12 months after the last run that pins it closes."
           ]
         },
         {
@@ -229,7 +229,7 @@
         {
           "title": "Migrate in-flight runs between flow versions",
           "story": "As a workspace operator, I want to move waiting runs to a corrected version of the same flow so that a definition fix can reach runs that wait for months.",
-          "description": "Native-to-native only: migrate selected waiting or running native runs to another published version of the same flow using an explicit node-occurrence mapping, validated in a dry run and applied atomically per run. This is not a Temporal-history converter (FR-MIG-04). Credential lineage, quota reservations and absolute timer due times carry over unchanged.",
+          "description": "Native-to-native only: dry-run validate explicit node-occurrence mappings and apply atomically per run, preserving credential lineage, quota reservations and absolute timer due times. Accepted ADR-0009 applies: W_max is 12 months, and live version references prevent artifact deletion. No Temporal-history converter is authorized.",
           "phase": "M3",
           "effort": "L",
           "dependencies": [
@@ -259,7 +259,7 @@
         {
           "title": "Implement the transactional run state machine",
           "story": "As a platform engineer, I want atomic state transitions so that crashes cannot lose accepted work.",
-          "description": "Persist run state, history, ready work and outbox records in one transaction with optimistic revisions.",
+          "description": "Persist run state, history, ready work and outbox records in one transaction with optimistic revisions. Accepted ADR-0003 and ADR-0004 apply: non-bypass runtime RLS within platform budgets, and the STO-03 shared outbox/inbox and fencing module (falcone #1331, #1343, #1356, #1361, #1381) participating in the engine's transaction; no parallel shared module is built.",
           "phase": "M1",
           "effort": "L",
           "dependencies": [
@@ -330,7 +330,7 @@
         {
           "title": "Define the native activity worker protocol",
           "story": "As a connector maintainer, I want an engine-neutral task context so that Falcone adapters no longer import Temporal.",
-          "description": "Specify claim, heartbeat, complete and fail messages with run/occurrence/attempt identity and credentials.",
+          "description": "Specify the internal trusted-worker context with run/occurrence/attempt identity and opaque credential references. Under accepted ADR-0006, reuse the ctr-worker-execution-api envelope (falcone-serverless #124) only if its owners confirm it carries the required metadata, and record that review before implementation; serverless invocation and checkpoints use the upstream contracts and the shared fencing module.",
           "phase": "M1",
           "effort": "L",
           "dependencies": [
@@ -384,13 +384,13 @@
           ],
           "requirements": [
             "The system must persist external job IDs and checkpoint references and resume observation after worker loss without blindly resubmitting the job.",
-            "The system must support waits, approvals and timers lasting months, up to a policy maximum set by the product owner, with bounded heartbeat, cancellation and credential-renewal policies, and must exercise credential renewal (FR-TEN-04) in a test that crosses a Keycloak session or offline-token expiry."
+            "The system must support waits, approvals and timers up to the maximum permitted wait W_max of 12 months, with bounded heartbeat, cancellation and credential-renewal policies, and must exercise credential renewal (FR-TEN-04) in a test that crosses a Keycloak session or offline-token expiry."
           ],
           "acceptance": [
             "A worker dies after job submission; reconciliation finds the same external job.",
             "A cancelled job cannot report the workflow completed; delayed cleanup is visible and retried under policy.",
             "A capability-qualified checkpoint resumes correctly; unsupported native workloads remain migration blockers.",
-            "A run waiting for the configured multi-month maximum in a simulated-time test resumes with renewed credentials after a Keycloak session or offline-token expiry, on its pinned interpreter version."
+            "A run waiting for W_max (12 months) in a simulated-time test resumes with renewed credentials after a Keycloak session or offline-token expiry, on its pinned interpreter version; a wait longer than W_max is rejected at validation or admission with a stable error code."
           ]
         }
       ]
@@ -830,7 +830,7 @@
         {
           "title": "Consume the falcone-serverless execution and checkpoint contracts",
           "story": "As a platform developer, I want one shared invocation contract so that workflow and serverless can evolve independently.",
-          "description": "Consume falcone-serverless's worker execution API (ctr-worker-execution-api) and job checkpoint contract (ctr-job-checkpoint) instead of defining a workflow-specific protocol. Keep workflow state in falcone-workflow and untrusted computation in falcone-serverless; the serverless Temporal-activity tasks stay while Temporal serves existing runs. Separate legacy largeTask support.",
+          "description": "Consume falcone-serverless's worker execution API (ctr-worker-execution-api v1, defined by falcone-serverless #124 and served by #130) and job checkpoint contract (ctr-job-checkpoint v1, falcone-serverless plan task JOB-01.t1 in gntik-ai/falcone functions-api, to be linked when published), retaining Temporal activities during drainage. Under accepted ADR-0006, exact API paths and versions are confirmed from the delivered code as an integration gate, with owner fixtures and retry, lease, metering and checkpoint ownership; no workflow-specific serverless protocol or runtime cycle is permitted.",
           "phase": "M0",
           "effort": "L",
           "dependencies": [
@@ -1014,7 +1014,7 @@
         {
           "title": "Implement upgrade, backup and recovery runbooks",
           "story": "As an on-call engineer, I want tested operating procedures so that releases and incidents are recoverable.",
-          "description": "Use expand/contract schema migrations, drain behavior, PostgreSQL HA and coordinated payload backup policies.",
+          "description": "Use expand/contract schema migrations, bounded drain, platform-confirmed PostgreSQL HA/PITR and coordinated payload backup policies. Accepted ADR-0003, ADR-0009 and ADR-0012 require retaining live interpreter and object references (at least 12 months after the last pinning run), explicit rollback limits and measured restore evidence before qualification.",
           "phase": "M3",
           "effort": "L",
           "dependencies": [
@@ -1022,7 +1022,7 @@
             "DSL-03"
           ],
           "requirements": [
-            "The system must support rolling compatible upgrades, bounded graceful drain and documented rollback limits for schema and interpreter changes, retaining every interpreter version referenced by an open run for at least the longest permitted remaining wait.",
+            "The system must support rolling compatible upgrades, bounded graceful drain and documented rollback limits for schema and interpreter changes, retaining every interpreter and definition version a run pins for at least 12 months (W_max) after the last run that pins it closes.",
             "The project must provide tested runbooks for database failover, backup restore, stuck runs, queue overload and key rotation."
           ],
           "acceptance": [
@@ -1085,7 +1085,7 @@
         {
           "title": "Build a migration inventory and differential harness",
           "story": "As a release engineer, I want evidence of semantic parity so that unsupported flows are not cut over.",
-          "description": "Inventory deployed DSLs, open runs, schedules, Temporal patches and SDK usage; use isolated effects for comparisons.",
+          "description": "Inventory deployed DSLs, open runs, schedules, Temporal patches, SDK usage and authoritative contract/image versions; compare outcomes with isolated effects. Accepted ADR-0013 makes the read-only Temporal staging workload baseline an M0 gate before numeric lease, connection-budget or capacity commitments.",
           "phase": "M0",
           "effort": "L",
           "dependencies": [

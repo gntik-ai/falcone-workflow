@@ -19,7 +19,7 @@ Falcone's workflow API and DSL are the public contract. Raw Temporal SDK and ser
 | D5 | Database | A separate database on the shared PostgreSQL cluster, not a schema in Falcone's database, with a connection budget. |
 | D6 | License | MIT, the same as Falcone. |
 | D7 | Cluster testing | Cluster tests run in dedicated `fw-test-*` namespaces and may read `in-falcone-staging`; `family-rentals-prod`, `musematic*` and `llmwiki*` are off limits. k3s with Pod Security "restricted" stands in for OpenShift. |
-| D8 | Waits and compensation | Keep current waits and approvals, support multi-month waits, and make compensation opt-in and versioned. |
+| D8 | Waits and compensation | Keep current waits and approvals, support multi-month waits, and make compensation opt-in and versioned. The maximum permitted wait W_max is 12 months (ADR-0009). |
 
 The repository seed (license, contributor guide, CI and the TypeScript skeleton) already provides the CI bootstrap, so OPS-03 no longer blocks M0 for CI. Capacity must be measured on the current Temporal staging deployment during M0 (MIG-01).
 
@@ -52,7 +52,7 @@ A review against 16 workflow engines and specifications found the baseline stron
 - **Should-have:** error boundaries and finalizers (DSL-04), dynamic fan-out (DSL-05), in-flight version migration (DSL-06), callback-token and event-or-timeout waits (EVT-04), lifecycle events and trigger filters (EVT-05), flow concurrency, rate limits and priority (TEN-04), human-task forms, quorum and escalation (HUM-04), bulk operations (OPS-04), SLA alerts (OBS-04), run search (OBS-05), test mode (CON-04), and typed incidents, retention and erasure, output schemas and synchronous acknowledgements on existing stories.
 - **Later** items are listed as optional enhancements after parity, and explicitly rejected patterns as rejected paths, in [trade-offs](tradeoffs.md).
 
-Eighteen under-specified requirements were completed in place, including FR-ACT-06, which now requires multi-month waits and retention of interpreter and definition versions for at least the longest permitted wait.
+Eighteen under-specified requirements were completed in place, including FR-ACT-06, which now requires multi-month waits and retention of interpreter and definition versions for at least the longest permitted wait. The operator later set that maximum wait, W_max, to 12 months (ADR-0009).
 
 ## Delivery gates
 
@@ -62,6 +62,12 @@ Eighteen under-specified requirements were completed in place, including FR-ACT-
 - **M3 — qualification and migration:** restore/load/soak tests, differential semantics, canary cohorts, schedule transfer, long-lived run drainage, operator bulk tooling, then retirement.
 
 Do not remove Temporal merely because M1 demonstrations succeed. Some deployed workflows may remain on the old engine for their full lifetime.
+
+## Accepted architecture decisions (ADRs 0002–0013)
+
+The [architecture review](architecture-review.md) proposed ADRs 0002–0013 covering ownership, persistence, shared primitives, dispatch, serverless tasks, expressions, calendars, versions, migration, credentials, history and capacity. The operator accepted all twelve as written on 30 October 2026, including the explicit R3 approval for RLS (ADR-0003), expression isolation (ADR-0007), dual-engine and live-run migration (ADR-0010) and long-lived credentials (ADR-0011). D1–D8 remain authoritative.
+
+The operator also resolved three review blockers: W_max is 12 months (F08, ADR-0009); the STO-03 shared module is falcone issues #1331, #1343, #1356, #1361 and #1381 (F03, ADR-0004); and `ctr-worker-execution-api` v1 is falcone-serverless #124 and #130, with `ctr-job-checkpoint` v1 planned as falcone-serverless task JOB-01.t1 (F05, ADR-0006). Exact contract paths and versions are confirmed from the delivered code as an integration gate. Per-repository technical issues come from the backlog decomposition (F01), and the M0 capacity baseline is a gate before numeric commitments (F12). The remaining findings stay open with their owner roles in the review.
 
 ## Document map
 

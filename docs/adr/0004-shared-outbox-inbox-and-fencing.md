@@ -1,6 +1,8 @@
 # ADR-0004: Shared outbox, inbox and lease fencing consumption
 
-Status: Proposed
+Status: Accepted (2026-10-30)
+
+Accepted by the operator on 30 October 2026 as written.
 
 ## Context
 
@@ -28,3 +30,7 @@ If delivery is late or transaction participation is incompatible, keep dependent
 ## Consequences
 
 Upstream contract delivery blocks production integration. Acceptance evidence must include commit-before-publish crashes, duplicate delivery, late completion, expired heartbeat and notification loss using the consumed module. Lease, heartbeat, connection-budget and capacity numbers remain provisional pending M0 measurement; this ADR fixes no signature or numeric default.
+
+## Operator resolution (2026-10-30)
+
+The interface location is confirmed (finding F03): the shared outbox/inbox and lease/fencing module is built in `gntik-ai/falcone` by falcone-serverless story STO-03, published as falcone issues [#1331](https://github.com/gntik-ai/falcone/issues/1331) (activation, deduplication and outbox written atomically), [#1343](https://github.com/gntik-ai/falcone/issues/1343) (fence attempts against stale writes), [#1356](https://github.com/gntik-ai/falcone/issues/1356) (outbox recovery and inbox deduplication), [#1361](https://github.com/gntik-ai/falcone/issues/1361) (crash-recovery tests) and [#1381](https://github.com/gntik-ai/falcone/issues/1381) (commit-gated asynchronous acceptance on the STO-03 transaction and relay). Related: [#1349](https://github.com/gntik-ai/falcone/issues/1349) (EVT-02.t1 fenced delivery attempts and deduplication window). The exact exported API, path and version are confirmed from those issues' delivered code as an integration gate; this does not block decomposition.

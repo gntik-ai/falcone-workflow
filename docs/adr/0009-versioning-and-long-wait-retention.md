@@ -1,6 +1,8 @@
 # ADR-0009: Pinned versions, long-wait retention and native run migration
 
-Status: Proposed
+Status: Accepted (2026-10-30)
+
+Accepted by the operator on 30 October 2026 as written. The explicit R3 approval recorded that day names ADR-0003, ADR-0007, ADR-0010 and ADR-0011; whether it also covers this ADR's native live-run migration (DSL-06) awaits operator confirmation.
 
 ## Context
 
@@ -27,3 +29,7 @@ Acceptance requires R3 review with a second reviewer (Security engineers) and ex
 ## Consequences
 
 Long waits create multi-version operational obligations. Workflow/runtime maintainers own version compatibility; SRE/platform team budgets retained artifacts and rollback support. Acceptance evidence must cover rolling versions, suspended runs, a stale migration revision and unmapped active work without waiting months in wall time.
+
+## Operator resolution (2026-10-30)
+
+`W_max` is 12 months (finding F08): the maximum permitted wait for waits, approvals and timers. Interpreter and definition versions, and anything else a live run pins, are never deleted while an open run still references them, and are retained for at least 12 months after the last run that pins them closes. FR-ACT-06, FR-DSL-06 and FR-OPS-03 carry the value.
