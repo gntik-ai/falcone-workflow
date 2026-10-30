@@ -32,4 +32,4 @@ Long waits create multi-version operational obligations. Workflow/runtime mainta
 
 ## Operator resolution (2026-10-30)
 
-`W_max` is 12 months (finding F08): the maximum permitted wait for waits, approvals and timers. Interpreter and definition versions, and anything else a live run pins, are retained for at least 12 months after the last run that pins them closes, and never while an open run still references them. FR-ACT-06, FR-DSL-06 and FR-OPS-03 carry the value.
+`W_max` is 12 months (finding F08): the maximum permitted wait for waits, approvals and timers. Interpreter and definition versions, and anything else a live run pins, are never deleted while an open run still references them, and are retained for at least 12 months after the last run that pins them closes. FR-ACT-06, FR-DSL-06 and FR-OPS-03 carry the value.

@@ -237,7 +237,7 @@ Version definitions, connector contracts and interpreter semantics independently
 ## Requirements
 
 - **FR-DSL-05:** The system must pin each run to immutable definition and interpreter versions and each child to an authorized explicit definition version; child behavior on parent cancellation, termination, failure or timeout follows FR-DSL-07.
-- **FR-DSL-06:** The system must reject unsupported historical versions, require an explicit audited migration plan before changing active-run semantics, and retain every interpreter and definition version, and every other artifact a run pins, for at least 12 months (W_max) after the last run that pins it closes, or migrate the run through FR-DSL-11.
+- **FR-DSL-06:** The system must reject unsupported historical versions, require an explicit audited migration plan before changing active-run semantics, and retain every interpreter and definition version, and every other artifact a run pins, for at least 12 months (W_max) after the last run that pins it closes; migrating a run through FR-DSL-11 moves that run's pins to the target version but never shortens the retention of the versions it pinned before.
 
 
 ## DSL-04 — Add error boundaries and failure handlers
