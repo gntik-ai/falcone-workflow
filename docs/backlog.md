@@ -748,7 +748,7 @@ As a flow author, I want to wait for an external callback or a correlated event 
 
 ## Description
 
-In an additive DSL version, add a callback wait node that issues a single-use signed completion token or URL bound to tenant and node occurrence, and an event-wait node that races a correlated platform event or signal against a timeout. Tokens are bearer capabilities: keep them short-lived, never log them, revoke them on cancellation, keep tenant identifiers out of the URL path and rate-limit the endpoint per tenant.
+In an additive DSL version, add a callback wait node that issues a single-use signed completion token or URL bound to tenant and node occurrence, and an event-wait node that races a correlated platform event or signal against a timeout. Anyone holding a token can complete the wait, so keep tokens short-lived, never log them, revoke them on cancellation, keep tenant identifiers out of the URL path and rate-limit the endpoint per tenant.
 
 ## Acceptance criteria
 
