@@ -41,6 +41,9 @@ for category in data['categories']:
             statements.append(statement)
         body = f'<!-- falcone-workflow:{sid} -->\n\n## User story\n\n{story["story"]}\n\n## Description\n\n{story["description"]}\n\n## Acceptance criteria\n\n'
         body += '\n'.join('- [ ] ' + ac for ac in story['acceptance'])
+        if story.get('operator_decisions'):
+            # Operator decisions recorded on the story (settled questions the decomposition reopened).
+            body += '\n\n' + story['operator_decisions'].strip('\n')
         body += f'\n\n## Planning\n\n- Parent: {epic_id}\n- Phase: {story["phase"]}\n- Effort: {story["effort"]}\n- Depends on: ' + (', '.join(story['dependencies']) or 'None')
         body += '\n\n## Requirements\n\n' + '\n'.join(f'- **{rid}:** {s}' for rid, s in zip(rids, statements)) + '\n'
         children.append(dict(id=sid, type='story', title=f'[falcone-workflow][{sid}] {story["title"]}', body=body, parent=epic_id, requirements=rids, dependencies=story['dependencies'], phase=story['phase'], effort=story['effort'], labels=['falcone-workflow', 'type:story', 'area:'+code.lower(), 'phase:'+story['phase'].lower(), 'effort:'+story['effort'].lower()]))

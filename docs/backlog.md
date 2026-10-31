@@ -1087,6 +1087,16 @@ Extract engine-neutral activity context for DB, storage, functions, events, HTTP
 - [ ] HTTP SSRF tests cover redirects, DNS resolution, private/metadata targets and credential forwarding.
 - [ ] External effects run against controlled test services; existing mocks are never reported as live qualification.
 
+## Operator decisions (2026-10-31): integration rules for decomposition
+
+These decisions settle questions that repeatedly reopened the EP-INT plan review. Every technical task of this story follows them.
+
+- **Contract declarations.** A task that uses a frame contract lists it in `interfaces.consumes`, even when a dependency already orders it after the provider: `ctr-serverless-contract-pins`, `ctr-trusted-worker-protocol`, `ctr-execution-credential-api`, `ctr-quota-policy` and `ctr-job-checkpoint`.
+- **Engine and worker split (D1).** The engine decides eligibility, tenant scope and durable scheduling. Every external effect (object upload, object deletion, provider submit, cancel and cleanup) runs in an authorized worker task through the existing worker and adapter contracts, with a short-lived task-scoped capability obtained through `ctr-execution-credential-api` from committed lineage under current policy. No engine service identity performs an external effect.
+- **Risk.** A task that adds a caller capability check or a new credential-resolving entrypoint is R3.
+- **Functions invocation.** Native `functions.invoke` uses only the pinned serverless client delivered by INT-02 (`ctr-serverless-contract-pins`). INT-01 adapter tasks keep only the retained legacy shims for functions and never add a second native invocation path.
+- **Qualification.** One qualification task per connector family runs against the confirmed pinned serverless contracts and controlled-service fixtures. It is ordered after the durable integrations it qualifies (INT-03 `llm.batch` resume and `largeTask.run` checkpoint integration), never before them.
+
 ## Planning
 
 - Parent: EP-INT
@@ -1119,6 +1129,15 @@ Consume falcone-serverless's worker execution API (ctr-worker-execution-api v1, 
 - [ ] Legacy largeTask profiles incompatible with restricted Wasm execution are flagged; no silent native-container fallback is permitted.
 - [ ] A gap found in a serverless contract becomes a falcone-serverless issue; no local workaround protocol is added.
 
+## Operator decisions (2026-10-31): integration rules for decomposition
+
+These decisions settle questions that repeatedly reopened the EP-INT plan review. Every technical task of this story follows them.
+
+- **Contract declarations.** A task that uses a frame contract lists it in `interfaces.consumes`, even when a dependency already orders it after the provider: `ctr-serverless-contract-pins`, `ctr-trusted-worker-protocol`, `ctr-execution-credential-api`, `ctr-quota-policy` and `ctr-job-checkpoint`.
+- **Engine and worker split (D1).** The engine decides eligibility, tenant scope and durable scheduling. Every external effect (object upload, object deletion, provider submit, cancel and cleanup) runs in an authorized worker task through the existing worker and adapter contracts, with a short-lived task-scoped capability obtained through `ctr-execution-credential-api` from committed lineage under current policy. No engine service identity performs an external effect.
+- **Risk.** A task that adds a caller capability check or a new credential-resolving entrypoint is R3.
+- **Ordering.** Blocked-profile rejection and classification tasks depend on the invocation client implementation they extend, and the catalog consumed by other stories is published only after both.
+
 ## Planning
 
 - Parent: EP-INT
@@ -1150,6 +1169,19 @@ Use a provider-neutral Falcone S3 interface and submit/status/collect/cancel pha
 - [ ] Missing or hash-mismatched objects fail explicitly; no cross-tenant object can be dereferenced.
 - [ ] SeaweedFS or another configured S3 provider passes the adapter contract before deployment; backend identity is recorded.
 - [ ] A payload over the inline threshold is stored by reference, and exceeding the per-run or per-node maximum fails with an explicit error.
+
+## Operator decisions (2026-10-31): integration rules for decomposition
+
+These decisions settle questions that repeatedly reopened the EP-INT plan review. Every technical task of this story follows them.
+
+- **Contract declarations.** A task that uses a frame contract lists it in `interfaces.consumes`, even when a dependency already orders it after the provider: `ctr-serverless-contract-pins`, `ctr-trusted-worker-protocol`, `ctr-execution-credential-api`, `ctr-quota-policy` and `ctr-job-checkpoint`.
+- **Engine and worker split (D1).** The engine decides eligibility, tenant scope and durable scheduling. Every external effect (object upload, object deletion, provider submit, cancel and cleanup) runs in an authorized worker task through the existing worker and adapter contracts, with a short-lived task-scoped capability obtained through `ctr-execution-credential-api` from committed lineage under current policy. No engine service identity performs an external effect.
+- **Risk.** A task that adds a caller capability check or a new credential-resolving entrypoint is R3.
+- **Staged objects (large inputs, outputs and checkpoints).** The engine reserves a tenant-scoped staging key with a lease before any upload. The key moves reserved → committed (by the run or task commit) or reserved → abandoned (when the lease expires without a commit). Orphan discovery scans reservations, not committed runs, so a first start that uploads and crashes before commit is found. Deletion is queued only for abandoned reservations whose lease has expired. A late start can never commit a key once it is abandoned (compare-and-set on the reservation state). Objects referenced by live runs or recovery points are never deleted (ADR-0012).
+- **Upload before start.** An input offload before run commit uses an upload intent bound to the reservation and a task-scoped capability from `ctr-execution-credential-api`. There is no unauthenticated or engine-identity upload.
+- **Inline threshold and limits.** The inline threshold and the per-run and per-node maximum referenced bytes come from the run's pinned `ctr-quota-policy` snapshot, read by the engine task that accounts bytes. The worker receives the decision (inline or by reference) in the dispatched task metadata and never reads runtime configuration for it.
+- **Byte accounting evidence.** Transactional per-run and per-node byte accounting is proven with real PostgreSQL transactions and concurrent processes: competing reference commits, rollback of rejected reservations, and no double counting after retry. These tests run in a dedicated `fw-test-*` namespace on the shared cluster (or the shared test namespace when `FW_TEST_NAMESPACE_MODE=shared`).
+- **Cleanup connectors.** Cleanup list and delete steps are registered task types with schemas in the connector catalog, so the catalog-validating runner accepts them.
 
 ## Planning
 
