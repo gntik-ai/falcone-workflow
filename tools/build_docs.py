@@ -142,6 +142,8 @@ for category in data['categories']:
             f'  - **Story:** {source["story"]}',
             f'  - **Description:** {source["description"]}',
             '  - **Acceptance:** ' + ' '.join(f'({n}) {text}' for n, text in enumerate(source['acceptance'], 1)),
+            *(['  - **Operator decisions:**'] + ['    ' + line for line in source['operator_decisions'].splitlines() if line.startswith('- ')]
+              if source.get('operator_decisions') else []),
             f'  - **Requirements:** {", ".join(c["requirements"])}. **Dependencies:** {", ".join(c["dependencies"]) or "None"}.',
             '',
         ]
