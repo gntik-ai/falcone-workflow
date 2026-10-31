@@ -41,7 +41,7 @@ python3 tools/build_docs.py && git diff --exit-code -- docs/
 
 ## Cluster testing (operator decision, 2026-10-30)
 
-- Unit and contract tests run locally and in CI. Every integration, runtime or end-to-end test that needs Kubernetes, PostgreSQL, Kafka or Falcone services runs on the shared cluster, in dedicated `fw-test-*` namespaces created and deleted by the test.
+- Unit and contract tests run locally and in CI. Every integration, runtime or end-to-end test that needs Kubernetes, PostgreSQL, Kafka or Falcone services runs on the shared cluster, in dedicated `fw-test-*` namespaces created and deleted by the test (the default, `FW_TEST_NAMESPACE_MODE=create`). Namespace creation is a switch because it is not always permitted (operator decision 2026-10-30): with `FW_TEST_NAMESPACE_MODE=shared` a test never creates or deletes namespaces; it uses the existing namespace named in `FW_TEST_NAMESPACE`, creates only new objects named with the run id and labelled `falcone.test/run=<id>`, and never updates, patches, relabels or deletes an object whose label is not this run's id. If creation is denied in `create` mode, the test fails before any mutation and names the switch.
 - Integration tests may also read `in-falcone-staging`. Every other namespace is off limits, including `family-rentals-prod`, `musematic*` and `llmwiki*`.
 - The cluster is k3s, not OpenShift. Pod Security "restricted" with seccomp `RuntimeDefault`, a read-only root filesystem and an arbitrary non-root UID stand in for OpenShift restricted-v2.
 - Never print or commit secrets.
