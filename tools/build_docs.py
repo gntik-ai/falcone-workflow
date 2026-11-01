@@ -49,7 +49,8 @@ for category in data['categories']:
         children.append(dict(id=sid, type='story', title=f'[falcone-workflow][{sid}] {story["title"]}', body=body, parent=epic_id, requirements=rids, dependencies=story['dependencies'], phase=story['phase'], effort=story['effort'], labels=['falcone-workflow', 'type:story', 'area:'+code.lower(), 'phase:'+story['phase'].lower(), 'effort:'+story['effort'].lower()]))
     by_category[code].sort(key=lambda r: int(r['id'][-2:]))
     requirements += by_category[code]
-    eb = f'<!-- falcone-workflow:{epic_id} -->\n\n## Goal\n\n{category["goal"]}\n\n## Stories\n\n' + '\n'.join('- '+c['id']+' — '+c['title'].split('] ')[-1] for c in children) + '\n\n## Completion\n\nAll child acceptance criteria pass; evidence is linked and unresolved compatibility differences are approved before cutover.\n'
+    # Operator decisions recorded on the epic (binding for every story's technical tasks).
+    eb = f'<!-- falcone-workflow:{epic_id} -->\n\n## Goal\n\n{category["goal"]}\n\n## Stories\n\n' + '\n'.join('- '+c['id']+' — '+c['title'].split('] ')[-1] for c in children) + (('\n\n' + category['operator_decisions'].strip('\n')) if category.get('operator_decisions') else '') + '\n\n## Completion\n\nAll child acceptance criteria pass; evidence is linked and unresolved compatibility differences are approved before cutover.\n'
     issues.append(dict(id=epic_id, type='epic', title=f'[falcone-workflow][{epic_id}] {name}', body=eb, parent=None, labels=['falcone-workflow', 'type:epic', 'area:'+code.lower()]))
     issues.extend(children)
 
@@ -142,7 +143,10 @@ for category in data['categories']:
             f'  - **Story:** {source["story"]}',
             f'  - **Description:** {source["description"]}',
             '  - **Acceptance:** ' + ' '.join(f'({n}) {text}' for n, text in enumerate(source['acceptance'], 1)),
-            *(['  - **Operator decisions:**'] + ['    ' + line for line in source['operator_decisions'].splitlines() if line.startswith('- ')]
+            # Every line of the decisions but their headings and blank lines, nesting kept: numbered
+            # steps, nested rules and closing paragraphs are binding too.
+            *(['  - **Operator decisions:**'] + ['    ' + line for line in source['operator_decisions'].splitlines()
+                                                if line.strip() and not line.startswith('#')]
               if source.get('operator_decisions') else []),
             f'  - **Requirements:** {", ".join(c["requirements"])}. **Dependencies:** {", ".join(c["dependencies"]) or "None"}.',
             '',

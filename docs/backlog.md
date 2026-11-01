@@ -1095,7 +1095,24 @@ These decisions settle questions that repeatedly reopened the EP-INT plan review
 - **Engine and worker split (D1).** The engine decides eligibility, tenant scope and durable scheduling. Every external effect (object upload, object deletion, provider submit, cancel and cleanup) runs in an authorized worker task through the existing worker and adapter contracts, with a short-lived task-scoped capability obtained through `ctr-execution-credential-api` from committed lineage under current policy. No engine service identity performs an external effect.
 - **Risk.** A task that adds a caller capability check or a new credential-resolving entrypoint is R3.
 - **Functions invocation.** Native `functions.invoke` uses only the pinned serverless client delivered by INT-02 (`ctr-serverless-contract-pins`). INT-01 adapter tasks keep only the retained legacy shims for functions and never add a second native invocation path.
-- **Qualification.** One qualification task per connector family runs against the confirmed pinned serverless contracts and controlled-service fixtures. It is ordered after the durable integrations it qualifies (INT-03 `llm.batch` resume and `largeTask.run` checkpoint integration), never before them.
+- **Qualification.** One qualification task per synchronous connector family runs against the confirmed pinned serverless contracts and controlled-service fixtures, after the INT-01 adapters it qualifies. The durable integrations (`llm.batch` resume and `largeTask.run` checkpoint integration) are qualified in INT-03, not here (see the 2026-11-01 ordering decision).
+
+## Operator decision (2026-11-01): acyclic integration order
+
+Earlier plans of this epic kept drafting circular task dependencies across and within its stories. The order below is binding for every technical task of EP-INT.
+
+- **Story order is strict:** INT-02 (M0) → INT-01 → INT-03. A task may depend on tasks of its own story, on tasks of an earlier story in this order, and on the other epics' stories listed under Planning. It never depends on a task of a later story.
+  - No INT-02 task depends on an INT-01 or INT-03 task. The connector catalog that INT-02 publishes comes after INT-02's implementations and extensions; only INT-02's documentation and ADR tasks may follow it.
+  - No INT-01 task depends on an INT-03 task.
+- **Task order within a story is strict:**
+  1. contract pins, schemas and fixtures;
+  2. implementations;
+  3. classification, rejection and other extensions of those implementations;
+  4. qualification;
+  5. documentation and ADRs.
+
+  A task depends only on tasks earlier in this order. Two tasks never depend on each other, directly or through other tasks.
+- **Qualification is split by story.** INT-01 qualifies the synchronous connector families: `db.query`, `storage.get/put`, `functions.invoke`, `events.publish`, `http.request`, `email.send` and `llm.complete`. Each is qualified after the INT-01 adapters it covers. INT-03 qualifies the durable integrations, `llm.batch` resume and `largeTask.run` checkpoint integration, after its own integrations. Together they provide the evidence for FR-INT-01.
 
 ## Planning
 
@@ -1137,6 +1154,23 @@ These decisions settle questions that repeatedly reopened the EP-INT plan review
 - **Engine and worker split (D1).** The engine decides eligibility, tenant scope and durable scheduling. Every external effect (object upload, object deletion, provider submit, cancel and cleanup) runs in an authorized worker task through the existing worker and adapter contracts, with a short-lived task-scoped capability obtained through `ctr-execution-credential-api` from committed lineage under current policy. No engine service identity performs an external effect.
 - **Risk.** A task that adds a caller capability check or a new credential-resolving entrypoint is R3.
 - **Ordering.** Blocked-profile rejection and classification tasks depend on the invocation client implementation they extend, and the catalog consumed by other stories is published only after both.
+
+## Operator decision (2026-11-01): acyclic integration order
+
+Earlier plans of this epic kept drafting circular task dependencies across and within its stories. The order below is binding for every technical task of EP-INT.
+
+- **Story order is strict:** INT-02 (M0) → INT-01 → INT-03. A task may depend on tasks of its own story, on tasks of an earlier story in this order, and on the other epics' stories listed under Planning. It never depends on a task of a later story.
+  - No INT-02 task depends on an INT-01 or INT-03 task. The connector catalog that INT-02 publishes comes after INT-02's implementations and extensions; only INT-02's documentation and ADR tasks may follow it.
+  - No INT-01 task depends on an INT-03 task.
+- **Task order within a story is strict:**
+  1. contract pins, schemas and fixtures;
+  2. implementations;
+  3. classification, rejection and other extensions of those implementations;
+  4. qualification;
+  5. documentation and ADRs.
+
+  A task depends only on tasks earlier in this order. Two tasks never depend on each other, directly or through other tasks.
+- **Qualification is split by story.** INT-01 qualifies the synchronous connector families: `db.query`, `storage.get/put`, `functions.invoke`, `events.publish`, `http.request`, `email.send` and `llm.complete`. Each is qualified after the INT-01 adapters it covers. INT-03 qualifies the durable integrations, `llm.batch` resume and `largeTask.run` checkpoint integration, after its own integrations. Together they provide the evidence for FR-INT-01.
 
 ## Planning
 
@@ -1182,6 +1216,23 @@ These decisions settle questions that repeatedly reopened the EP-INT plan review
 - **Inline threshold and limits.** The inline threshold and the per-run and per-node maximum referenced bytes come from the run's pinned `ctr-quota-policy` snapshot, read by the engine task that accounts bytes. The worker receives the decision (inline or by reference) in the dispatched task metadata and never reads runtime configuration for it.
 - **Byte accounting evidence.** Transactional per-run and per-node byte accounting is proven with real PostgreSQL transactions and concurrent processes: competing reference commits, rollback of rejected reservations, and no double counting after retry. These tests run in a dedicated `fw-test-*` namespace on the shared cluster (or the shared test namespace when `FW_TEST_NAMESPACE_MODE=shared`).
 - **Cleanup connectors.** Cleanup list and delete steps are registered task types with schemas in the connector catalog, so the catalog-validating runner accepts them.
+
+## Operator decision (2026-11-01): acyclic integration order
+
+Earlier plans of this epic kept drafting circular task dependencies across and within its stories. The order below is binding for every technical task of EP-INT.
+
+- **Story order is strict:** INT-02 (M0) → INT-01 → INT-03. A task may depend on tasks of its own story, on tasks of an earlier story in this order, and on the other epics' stories listed under Planning. It never depends on a task of a later story.
+  - No INT-02 task depends on an INT-01 or INT-03 task. The connector catalog that INT-02 publishes comes after INT-02's implementations and extensions; only INT-02's documentation and ADR tasks may follow it.
+  - No INT-01 task depends on an INT-03 task.
+- **Task order within a story is strict:**
+  1. contract pins, schemas and fixtures;
+  2. implementations;
+  3. classification, rejection and other extensions of those implementations;
+  4. qualification;
+  5. documentation and ADRs.
+
+  A task depends only on tasks earlier in this order. Two tasks never depend on each other, directly or through other tasks.
+- **Qualification is split by story.** INT-01 qualifies the synchronous connector families: `db.query`, `storage.get/put`, `functions.invoke`, `events.publish`, `http.request`, `email.send` and `llm.complete`. Each is qualified after the INT-01 adapters it covers. INT-03 qualifies the durable integrations, `llm.batch` resume and `largeTask.run` checkpoint integration, after its own integrations. Together they provide the evidence for FR-INT-01.
 
 ## Planning
 
