@@ -662,13 +662,23 @@ ADRs 0002–0013 were accepted by the operator on 30 October 2026, following arc
   - **Description:** Extract engine-neutral activity context for DB, storage, functions, events, HTTP, email and LLM tasks.
   - **Acceptance:** (1) Each task type has success/error/cancellation/duplicate-attempt fixtures, a mapping from every legacy Temporal error type it emits to its FR-ACT-07 type, and an explicit migration status. (2) HTTP SSRF tests cover redirects, DNS resolution, private/metadata targets and credential forwarding. (3) External effects run against controlled test services; existing mocks are never reported as live qualification.
   - **Operator decisions:**
+    These decisions settle questions that repeatedly reopened the EP-INT plan review. Every technical task of this story follows them.
     - **Contract declarations.** A task that uses a frame contract lists it in `interfaces.consumes`, even when a dependency already orders it after the provider: `ctr-serverless-contract-pins`, `ctr-trusted-worker-protocol`, `ctr-execution-credential-api`, `ctr-quota-policy` and `ctr-job-checkpoint`.
     - **Engine and worker split (D1).** The engine decides eligibility, tenant scope and durable scheduling. Every external effect (object upload, object deletion, provider submit, cancel and cleanup) runs in an authorized worker task through the existing worker and adapter contracts, with a short-lived task-scoped capability obtained through `ctr-execution-credential-api` from committed lineage under current policy. No engine service identity performs an external effect.
     - **Risk.** A task that adds a caller capability check or a new credential-resolving entrypoint is R3.
     - **Functions invocation.** Native `functions.invoke` uses only the pinned serverless client delivered by INT-02 (`ctr-serverless-contract-pins`). INT-01 adapter tasks keep only the retained legacy shims for functions and never add a second native invocation path.
     - **Qualification.** One qualification task per synchronous connector family runs against the confirmed pinned serverless contracts and controlled-service fixtures, after the INT-01 adapters it qualifies. The durable integrations (`llm.batch` resume and `largeTask.run` checkpoint integration) are qualified in INT-03, not here (see the 2026-11-01 ordering decision).
+    Earlier plans of this epic kept drafting circular task dependencies across and within its stories. The order below is binding for every technical task of EP-INT.
     - **Story order is strict:** INT-02 (M0) → INT-01 → INT-03. A task may depend on tasks of its own story, on tasks of an earlier story in this order, and on the other epics' stories listed under Planning. It never depends on a task of a later story.
+      - No INT-02 task depends on an INT-01 or INT-03 task. The connector catalog that INT-02 publishes comes after INT-02's implementations and extensions; only INT-02's documentation and ADR tasks may follow it.
+      - No INT-01 task depends on an INT-03 task.
     - **Task order within a story is strict:**
+      1. contract pins, schemas and fixtures;
+      2. implementations;
+      3. classification, rejection and other extensions of those implementations;
+      4. qualification;
+      5. documentation and ADRs.
+      A task depends only on tasks earlier in this order. Two tasks never depend on each other, directly or through other tasks.
     - **Qualification is split by story.** INT-01 qualifies the synchronous connector families: `db.query`, `storage.get/put`, `functions.invoke`, `events.publish`, `http.request`, `email.send` and `llm.complete`. Each is qualified after the INT-01 adapters it covers. INT-03 qualifies the durable integrations, `llm.batch` resume and `largeTask.run` checkpoint integration, after its own integrations. Together they provide the evidence for FR-INT-01.
   - **Requirements:** FR-INT-01, FR-INT-02. **Dependencies:** ACT-02, TEN-02.
 
@@ -677,12 +687,22 @@ ADRs 0002–0013 were accepted by the operator on 30 October 2026, following arc
   - **Description:** Consume falcone-serverless's worker execution API (ctr-worker-execution-api v1, defined by falcone-serverless #124 and served by #130) and job checkpoint contract (ctr-job-checkpoint v1, falcone-serverless plan task JOB-01.t1 in gntik-ai/falcone functions-api, to be linked when published), retaining Temporal activities during drainage. Under accepted ADR-0006, exact API paths and versions are confirmed from the delivered code as an integration gate, with owner fixtures and retry, lease, metering and checkpoint ownership; no workflow-specific serverless protocol or runtime cycle is permitted.
   - **Acceptance:** (1) A contract simulator built from the pinned serverless contract versions tests submit acknowledgement loss, duplicate completion, stale cancellation and checkpoint references. (2) An ADR records the consumed contract versions and the ownership of execution leases, logical retries, metering and checkpoint retention. (3) Legacy largeTask profiles incompatible with restricted Wasm execution are flagged; no silent native-container fallback is permitted. (4) A gap found in a serverless contract becomes a falcone-serverless issue; no local workaround protocol is added.
   - **Operator decisions:**
+    These decisions settle questions that repeatedly reopened the EP-INT plan review. Every technical task of this story follows them.
     - **Contract declarations.** A task that uses a frame contract lists it in `interfaces.consumes`, even when a dependency already orders it after the provider: `ctr-serverless-contract-pins`, `ctr-trusted-worker-protocol`, `ctr-execution-credential-api`, `ctr-quota-policy` and `ctr-job-checkpoint`.
     - **Engine and worker split (D1).** The engine decides eligibility, tenant scope and durable scheduling. Every external effect (object upload, object deletion, provider submit, cancel and cleanup) runs in an authorized worker task through the existing worker and adapter contracts, with a short-lived task-scoped capability obtained through `ctr-execution-credential-api` from committed lineage under current policy. No engine service identity performs an external effect.
     - **Risk.** A task that adds a caller capability check or a new credential-resolving entrypoint is R3.
     - **Ordering.** Blocked-profile rejection and classification tasks depend on the invocation client implementation they extend, and the catalog consumed by other stories is published only after both.
+    Earlier plans of this epic kept drafting circular task dependencies across and within its stories. The order below is binding for every technical task of EP-INT.
     - **Story order is strict:** INT-02 (M0) → INT-01 → INT-03. A task may depend on tasks of its own story, on tasks of an earlier story in this order, and on the other epics' stories listed under Planning. It never depends on a task of a later story.
+      - No INT-02 task depends on an INT-01 or INT-03 task. The connector catalog that INT-02 publishes comes after INT-02's implementations and extensions; only INT-02's documentation and ADR tasks may follow it.
+      - No INT-01 task depends on an INT-03 task.
     - **Task order within a story is strict:**
+      1. contract pins, schemas and fixtures;
+      2. implementations;
+      3. classification, rejection and other extensions of those implementations;
+      4. qualification;
+      5. documentation and ADRs.
+      A task depends only on tasks earlier in this order. Two tasks never depend on each other, directly or through other tasks.
     - **Qualification is split by story.** INT-01 qualifies the synchronous connector families: `db.query`, `storage.get/put`, `functions.invoke`, `events.publish`, `http.request`, `email.send` and `llm.complete`. Each is qualified after the INT-01 adapters it covers. INT-03 qualifies the durable integrations, `llm.batch` resume and `largeTask.run` checkpoint integration, after its own integrations. Together they provide the evidence for FR-INT-01.
   - **Requirements:** FR-INT-03, FR-INT-04. **Dependencies:** CON-01.
 
@@ -691,6 +711,7 @@ ADRs 0002–0013 were accepted by the operator on 30 October 2026, following arc
   - **Description:** Use a provider-neutral Falcone S3 interface and submit/status/collect/cancel phases for asynchronous integrations.
   - **Acceptance:** (1) An interrupted LLM batch resumes polling the same provider job; ambiguous submit is reconciled. (2) Missing or hash-mismatched objects fail explicitly; no cross-tenant object can be dereferenced. (3) SeaweedFS or another configured S3 provider passes the adapter contract before deployment; backend identity is recorded. (4) A payload over the inline threshold is stored by reference, and exceeding the per-run or per-node maximum fails with an explicit error.
   - **Operator decisions:**
+    These decisions settle questions that repeatedly reopened the EP-INT plan review. Every technical task of this story follows them.
     - **Contract declarations.** A task that uses a frame contract lists it in `interfaces.consumes`, even when a dependency already orders it after the provider: `ctr-serverless-contract-pins`, `ctr-trusted-worker-protocol`, `ctr-execution-credential-api`, `ctr-quota-policy` and `ctr-job-checkpoint`.
     - **Engine and worker split (D1).** The engine decides eligibility, tenant scope and durable scheduling. Every external effect (object upload, object deletion, provider submit, cancel and cleanup) runs in an authorized worker task through the existing worker and adapter contracts, with a short-lived task-scoped capability obtained through `ctr-execution-credential-api` from committed lineage under current policy. No engine service identity performs an external effect.
     - **Risk.** A task that adds a caller capability check or a new credential-resolving entrypoint is R3.
@@ -699,8 +720,17 @@ ADRs 0002–0013 were accepted by the operator on 30 October 2026, following arc
     - **Inline threshold and limits.** The inline threshold and the per-run and per-node maximum referenced bytes come from the run's pinned `ctr-quota-policy` snapshot, read by the engine task that accounts bytes. The worker receives the decision (inline or by reference) in the dispatched task metadata and never reads runtime configuration for it.
     - **Byte accounting evidence.** Transactional per-run and per-node byte accounting is proven with real PostgreSQL transactions and concurrent processes: competing reference commits, rollback of rejected reservations, and no double counting after retry. These tests run in a dedicated `fw-test-*` namespace on the shared cluster (or the shared test namespace when `FW_TEST_NAMESPACE_MODE=shared`).
     - **Cleanup connectors.** Cleanup list and delete steps are registered task types with schemas in the connector catalog, so the catalog-validating runner accepts them.
+    Earlier plans of this epic kept drafting circular task dependencies across and within its stories. The order below is binding for every technical task of EP-INT.
     - **Story order is strict:** INT-02 (M0) → INT-01 → INT-03. A task may depend on tasks of its own story, on tasks of an earlier story in this order, and on the other epics' stories listed under Planning. It never depends on a task of a later story.
+      - No INT-02 task depends on an INT-01 or INT-03 task. The connector catalog that INT-02 publishes comes after INT-02's implementations and extensions; only INT-02's documentation and ADR tasks may follow it.
+      - No INT-01 task depends on an INT-03 task.
     - **Task order within a story is strict:**
+      1. contract pins, schemas and fixtures;
+      2. implementations;
+      3. classification, rejection and other extensions of those implementations;
+      4. qualification;
+      5. documentation and ADRs.
+      A task depends only on tasks earlier in this order. Two tasks never depend on each other, directly or through other tasks.
     - **Qualification is split by story.** INT-01 qualifies the synchronous connector families: `db.query`, `storage.get/put`, `functions.invoke`, `events.publish`, `http.request`, `email.send` and `llm.complete`. Each is qualified after the INT-01 adapters it covers. INT-03 qualifies the durable integrations, `llm.batch` resume and `largeTask.run` checkpoint integration, after its own integrations. Together they provide the evidence for FR-INT-01.
   - **Requirements:** FR-INT-05, FR-INT-06. **Dependencies:** INT-01, INT-02, EVT-03.
 
