@@ -437,13 +437,13 @@ ADRs 0002–0013 were accepted by the operator on 30 October 2026, following arc
   - **Story:** As a Falcone maintainer, I want a versioned contract inventory so that replacement cannot silently change existing behavior.
   - **Description:** Inventory routes, DSL, errors, roles, schedules, monitoring and task envelopes against pinned source and deployed fixtures.
   - **Acceptance:** (1) Capture fixtures for definition CRUD, publish, validate, executions, cancel, retry, signal, catalog and schedules. (2) Include existing SSE node-status/log-line/stream-end frames and Last-Event-ID behavior. (3) Record every direct Temporal SDK or API caller as a migration item; raw Temporal SDK and server compatibility is out of scope (ADR 0001). (4) Fixture the legacy behaviors the native engine must reproduce: which triggers use start-or-signal and how their key is derived, what retry means, flow-input required/default enforcement, task-input reference rules, schedule overlap-alias normalisation and the effective retry and timeout defaults injected for absent policies.
-  - **Requirements:** FR-CON-01, FR-CON-02. **Dependencies:** None.
+  - **Requirements:** FR-CON-02. **Dependencies:** None.
 
 - **CON-02 — Implement the Falcone facade and backend routing** · L · M1 · #14
   - **Story:** As an application developer, I want stable Falcone APIs so that clients survive the engine migration.
   - **Description:** Introduce a narrow WorkflowBackend interface inside Falcone; separate public compatibility from internal engine routes.
   - **Acceptance:** (1) Concurrent identical starts yield one run; reuse of the key with different input returns a conflict. (2) Historic Temporal runs remain queryable and cancellable during mixed operation. (3) Connection failure followed by recovery succeeds without process restart; legacy error mappings are fixture-tested. (4) Business-ID conflict and reuse-after-close policies are fixture-tested, and a key reused after its retention window is documented. (5) Cancel, terminate and retry are fixture-tested as distinct operations: terminate requires a reason and is audited, retry follows the inventoried legacy meaning, children follow FR-DSL-07, and each response reports acceptance separately from the terminal outcome.
-  - **Requirements:** FR-CON-03, FR-CON-04, FR-CON-07. **Dependencies:** CON-01, DUR-01.
+  - **Requirements:** FR-CON-01, FR-CON-03, FR-CON-04, FR-CON-07. **Dependencies:** CON-01, DUR-01.
 
 - **CON-03 — Provide CLI and console integration contracts** · M · M2 · #15
   - **Story:** As a Falcone user, I want familiar authoring and monitoring tools so that I do not need another workflow portal.
