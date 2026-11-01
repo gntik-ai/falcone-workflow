@@ -34,7 +34,6 @@ Inventory routes, DSL, errors, roles, schedules, monitoring and task envelopes a
 
 ## Requirements
 
-- **FR-CON-01:** The system must preserve inventoried Falcone workflow API routes, response schemas, status codes and tenant-scoped identifiers through a compatibility facade.
 - **FR-CON-02:** The project must publish a compatibility matrix marking each observed behavior as preserved, intentionally versioned, or a migration blocker.
 
 
@@ -67,6 +66,7 @@ Introduce a narrow WorkflowBackend interface inside Falcone; separate public com
 
 ## Requirements
 
+- **FR-CON-01:** The system must preserve inventoried Falcone workflow API routes, response schemas, status codes and tenant-scoped identifiers through a compatibility facade.
 - **FR-CON-03:** The system must expose authenticated start, get, list, cancel, retry and signal operations with idempotency keys scoped to (tenant, workspace, flow): the same key with the same input returns the same run for at least max(24 h, the run's retention) and a different input returns a conflict; an optional business ID has a conflict policy (fail or use-existing; terminate-existing is administrator-only) and a reuse-after-close policy (allow, allow-if-failed or reject).
 - **FR-CON-04:** The system must route every existing run to its recorded backend and return a retryable service-unavailable response when that backend is unavailable.
 - **FR-CON-07:** The system must provide cancel (cooperative: stops new normal work, runs configured cleanup or compensation), terminate (administrative: no further workflow logic, reason required, audited) and retry (the inventoried legacy meaning, recorded either as a linked new run or as a new attempt lineage of the failed node occurrence) as distinct operations with explicit parent/child propagation, each reporting request acceptance separately from the eventual terminal outcome.
