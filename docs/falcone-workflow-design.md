@@ -477,6 +477,10 @@ ADRs 0002–0013 were accepted by the operator on 30 October 2026, following arc
   - **Story:** As an operator, I want safe upgrades so that long-running flows retain their intended behavior.
   - **Description:** Version definitions, connector contracts and interpreter semantics independently; retain old interpreters while runs drain.
   - **Acceptance:** (1) Publishing a new definition leaves active parent and child runs unchanged. (2) A rolling upgrade with old/new evaluators completes compatible runs and leaves unsupported runs safely parked. (3) Bounded sub-flow depth and expanded graph size prevent recursive resource exhaustion. (4) Cancelling, terminating, failing or timing out a parent applies the inventoried legacy child policy (Temporal's default is terminate) in fixtures; an abandoned child still counts against its tenant's quota. (5) An upgrade cannot remove an interpreter or definition version, or another pinned artifact, while an open run references it or within 12 months after the last run that pins it closes.
+  - **Operator decisions:**
+    Earlier plans of EP-DSL were refused because tasks of this story cited FR-DSL-07, which belongs to DSL-02. The rule below is binding for every technical task of this story.
+    - A task cites only this story's requirements: FR-DSL-05 and FR-DSL-06.
+    - The per-interpreter-version parallel-node and child-run semantics (FR-DSL-07) are defined by DSL-02. Tasks here that pin or record those semantics consume DSL-02's definition through the story dependency on DSL-02. They name it in their description and interfaces, never in their requirements.
   - **Requirements:** FR-DSL-05, FR-DSL-06. **Dependencies:** DSL-02.
 
 - **DSL-04 — Add error boundaries and failure handlers** · L · M2 · #52
@@ -495,6 +499,10 @@ ADRs 0002–0013 were accepted by the operator on 30 October 2026, following arc
   - **Story:** As a workspace operator, I want to move waiting runs to a corrected version of the same flow so that a definition fix can reach runs that wait for months.
   - **Description:** Native-to-native only: dry-run validate explicit node-occurrence mappings and apply atomically per run, preserving credential lineage, quota reservations and absolute timer due times. Accepted ADR-0009 applies: W_max is 12 months, and live version references prevent artifact deletion. No Temporal-history converter is authorized.
   - **Acceptance:** (1) A dry run lists, per selected run, the mapped node occurrences and every reason a run cannot be migrated, without changing any run. (2) Migration is rejected when an active task, timer or approval lacks a mapping or a mapping changes node type or scope. (3) An applied migration commits atomically per run under the expected revision, keeps absolute timer due times, credential lineage and quota reservations, and records actor, reason and both versions in audit. (4) A stale run revision fails that run's migration without partial changes.
+  - **Operator decisions:**
+    Earlier plans of EP-DSL were refused because tasks of this story cited FR-DSL-06, which belongs to DSL-03. The rule below is binding for every technical task of this story.
+    - A task cites only this story's requirement: FR-DSL-11.
+    - Rejecting unsupported historical versions, requiring an audited migration plan before changing active-run semantics, and retaining pinned versions (FR-DSL-06) are defined by DSL-03. Tasks here that rely on them consume DSL-03's behaviour through the story dependency on DSL-03. They name it in their description and interfaces, never in their requirements.
   - **Requirements:** FR-DSL-11. **Dependencies:** DSL-03, OBS-01.
 
 ### DUR. Durable state and recovery

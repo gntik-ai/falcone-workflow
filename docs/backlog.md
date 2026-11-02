@@ -227,6 +227,13 @@ Version definitions, connector contracts and interpreter semantics independently
 - [ ] Cancelling, terminating, failing or timing out a parent applies the inventoried legacy child policy (Temporal's default is terminate) in fixtures; an abandoned child still counts against its tenant's quota.
 - [ ] An upgrade cannot remove an interpreter or definition version, or another pinned artifact, while an open run references it or within 12 months after the last run that pins it closes.
 
+## Operator decision (2026-11-02): requirement citations
+
+Earlier plans of EP-DSL were refused because tasks of this story cited FR-DSL-07, which belongs to DSL-02. The rule below is binding for every technical task of this story.
+
+- A task cites only this story's requirements: FR-DSL-05 and FR-DSL-06.
+- The per-interpreter-version parallel-node and child-run semantics (FR-DSL-07) are defined by DSL-02. Tasks here that pin or record those semantics consume DSL-02's definition through the story dependency on DSL-02. They name it in their description and interfaces, never in their requirements.
+
 ## Planning
 
 - Parent: EP-DSL
@@ -320,6 +327,13 @@ Native-to-native only: dry-run validate explicit node-occurrence mappings and ap
 - [ ] Migration is rejected when an active task, timer or approval lacks a mapping or a mapping changes node type or scope.
 - [ ] An applied migration commits atomically per run under the expected revision, keeps absolute timer due times, credential lineage and quota reservations, and records actor, reason and both versions in audit.
 - [ ] A stale run revision fails that run's migration without partial changes.
+
+## Operator decision (2026-11-02): requirement citations
+
+Earlier plans of EP-DSL were refused because tasks of this story cited FR-DSL-06, which belongs to DSL-03. The rule below is binding for every technical task of this story.
+
+- A task cites only this story's requirement: FR-DSL-11.
+- Rejecting unsupported historical versions, requiring an audited migration plan before changing active-run semantics, and retaining pinned versions (FR-DSL-06) are defined by DSL-03. Tasks here that rely on them consume DSL-03's behaviour through the story dependency on DSL-03. They name it in their description and interfaces, never in their requirements.
 
 ## Planning
 
