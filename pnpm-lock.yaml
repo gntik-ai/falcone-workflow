@@ -8,6 +8,8 @@ importers:
 
   .: {}
 
+  packages/contract-fixtures: {}
+
   packages/engine:
     devDependencies:
       '@types/node':
